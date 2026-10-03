@@ -585,7 +585,6 @@ local function createTabButton(name, order)
 end
 
 local TabMain = createTabButton("Main", 1)
-local TabPlayer = createTabButton("Player", 2)
 local TabSettings = createTabButton("Settings", 3)
 local TabInfo = createTabButton("Info", 4)
 
@@ -763,55 +762,6 @@ ZoneHint.TextSize = 12
 ZoneHint.TextXAlignment = Enum.TextXAlignment.Left
 ZoneHint.Parent = MainPage
 
-local PlayerPage = Instance.new("Frame")
-PlayerPage.Size = UDim2.new(1, 0, 1, 0)
-PlayerPage.BackgroundTransparency = 1
-PlayerPage.Visible = false
-PlayerPage.Parent = Content
-
-local function createPlayerControl(name, yPos, defaultValue, callback)
-    local label = Instance.new("TextLabel")
-    label.Size = UDim2.new(0.5, 0, 0, 28)
-    label.Position = UDim2.new(0, 10, 0, yPos)
-    label.BackgroundTransparency = 1
-    label.Text = name
-    label.TextColor3 = Color3.fromRGB(190, 190, 210)
-    label.Font = Enum.Font.Gotham
-    label.TextSize = 14
-    label.TextXAlignment = Enum.TextXAlignment.Left
-    label.Parent = PlayerPage
-
-    local box = Instance.new("TextBox")
-    box.Size = UDim2.new(0.38, 0, 0, 30)
-    box.Position = UDim2.new(0.55, 0, 0, yPos)
-    box.BackgroundColor3 = Color3.fromRGB(35, 35, 48)
-    box.Text = tostring(defaultValue)
-    box.TextColor3 = Color3.fromRGB(230, 230, 245)
-    box.Font = Enum.Font.Gotham
-    box.TextSize = 14
-    box.Parent = PlayerPage
-    Instance.new("UICorner", box).CornerRadius = UDim.new(0, 6)
-
-    box.FocusLost:Connect(function()
-        local num = tonumber(box.Text)
-        if num and humanoid then
-            callback(num)
-            box.Text = tostring(num)
-        end
-    end)
-end
-
-createPlayerControl("WalkSpeed", 20, walkSpeed, function(v)
-    walkSpeed = v
-    if humanoid then humanoid.WalkSpeed = v end
-    saveConfig()
-end)
-createPlayerControl("JumpPower", 70, jumpPower, function(v)
-    jumpPower = v
-    if humanoid then humanoid.JumpPower = v end
-    saveConfig()
-end)
-
 local SettingsPage = Instance.new("Frame")
 SettingsPage.Size = UDim2.new(1, 0, 1, 0)
 SettingsPage.BackgroundTransparency = 1
@@ -886,17 +836,14 @@ local function switchTab(tab)
     local inactiveText = Color3.fromRGB(180, 180, 200)
 
     TabMain.BackgroundColor3 = (tab == "Main") and active or inactive
-    TabPlayer.BackgroundColor3 = (tab == "Player") and active or inactive
     TabSettings.BackgroundColor3 = (tab == "Settings") and active or inactive
     TabInfo.BackgroundColor3 = (tab == "Info") and active or inactive
     TabMain.TextColor3 = (tab == "Main") and activeText or inactiveText
-    TabPlayer.TextColor3 = (tab == "Player") and activeText or inactiveText
     TabSettings.TextColor3 = (tab == "Settings") and activeText or inactiveText
     TabInfo.TextColor3 = (tab == "Info") and activeText or inactiveText
 end
 
 TabMain.MouseButton1Click:Connect(function() switchTab("Main") end)
-TabPlayer.MouseButton1Click:Connect(function() switchTab("Player") end)
 TabSettings.MouseButton1Click:Connect(function() switchTab("Settings") end)
 TabInfo.MouseButton1Click:Connect(function() switchTab("Info") end)
 
