@@ -286,7 +286,7 @@ end
 local function namedItem(prompt)
     local current = prompt
     while current and current ~= workspace do
-        if (current:IsA("Model") or current:IsA("BasePart")) and nameOk(current.Name) then
+        if current:IsA("Model") and nameOk(current.Name) then
             return current
         end
         current = current.Parent
