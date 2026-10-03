@@ -12,7 +12,7 @@ local Zones = {
     [1] = {
         name = "1 зона",
         hole = nil,
-        items = {"Chocolate bar", "Trash Box", "Calendars", "Battery", "Crate", "Wallet"},
+        items = {"Chocolate bar", "TrashBox", "Calendars", "Battery", "Crate", "Wallet"},
     },
     [2] = {
         name = "2 зона",
