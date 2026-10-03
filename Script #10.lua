@@ -1,0 +1,739 @@
+-- ====================== SERVICES ======================
+local Players = game:GetService("Players")
+local UIS = game:GetService("UserInputService")
+
+local player = Players.LocalPlayer
+local mouse = player:GetMouse()
+
+-- ====================== НАСТРОЙКИ ======================
+local holePos = Vector3.new(89, -4, 325)
+local itemNames = {"Anvil", "BusStop", "IronSafe"}
+
+local Settings = {
+    maxStep = 4.5,
+    stepDelay = 0.034,
+    pickupWait = 0.28,
+    depositClicks = 3,
+    resetEvery = 4,
+    throwRadius = 13
+}
+
+local deposited = 0
+local running = false
+local autoReset = true          -- автосброс шкалы
+local currentTab = "Main"
+local minimized = false
+
+-- ====================== ПЕРСОНАЖ ======================
+local character, root, humanoid
+
+local function setupCharacter(char)
+    character = char
+    root = character:WaitForChild("HumanoidRootPart", 8)
+    humanoid = character:WaitForChild("Humanoid", 8)
+    
+    if humanoid then
+        humanoid.Died:Connect(function()
+            running = false
+        end)
+    end
+end
+
+if player.Character then
+    setupCharacter(player.Character)
+end
+
+player.CharacterAdded:Connect(function(char)
+    task.wait(0.6)
+    setupCharacter(char)
+end)
+
+-- ====================== НАСТРОЙКИ БРОСКА (КРУГ) ======================
+local THROW_HEIGHT = 3.2
+
+local SAFE_POS = holePos + Vector3.new(0, 6, 0)
+
+-- ====================== БЕЗОПАСНЫЕ ФУНКЦИИ ======================
+local function isValidPosition(pos)
+    if typeof(pos) ~= "Vector3" then return false end
+    if pos.X ~= pos.X or pos.Y ~= pos.Y or pos.Z ~= pos.Z then return false end
+    if math.abs(pos.X) == math.huge or math.abs(pos.Y) == math.huge or math.abs(pos.Z) == math.huge then return false end
+    if pos.Y < -30 or pos.Y > 200 then return false end
+    if math.abs(pos.X) > 1200 or math.abs(pos.Z) > 1200 then return false end
+    return true
+end
+
+local function forceSafe()
+    if root and root.Parent then
+        root.AssemblyLinearVelocity = Vector3.zero
+        root.AssemblyAngularVelocity = Vector3.zero
+        root.CFrame = CFrame.new(SAFE_POS)
+    end
+end
+
+local function isItemStillValid(item)
+    if not item or not item.Parent then return false end
+    if not item:IsDescendantOf(workspace) then return false end
+
+    local prompt = item:FindFirstChild("PickupPrompt", true)
+    local pos
+    if prompt and prompt.Parent and prompt.Parent:IsA("BasePart") then
+        pos = prompt.Parent.Position
+    else
+        local part = item:FindFirstChildWhichIsA("BasePart", true)
+        pos = part and part.Position
+    end
+
+    return pos ~= nil and isValidPosition(pos)
+end
+
+local function nameOk(n)
+    return n == "Anvil" or n == "BusStop" or n == "IronSafe"
+end
+
+local Players = game:GetService("Players")
+local localPlayer = Players.LocalPlayer
+
+local function isOtherCharacter(model)
+    if not model or not model:IsA("Model") then return false end
+    local plr = Players:GetPlayerFromCharacter(model)
+    return plr ~= nil and plr ~= localPlayer
+end
+
+local function isHeldBySomeoneElse(item)
+    if not item or not item.Parent then return true end
+
+    local current = item
+    while current and current ~= workspace do
+        if isOtherCharacter(current) then
+            return true
+        end
+        current = current.Parent
+    end
+
+    local prompt = item:FindFirstChild("PickupPrompt", true)
+    if prompt and prompt.Enabled == false then
+        return true
+    end
+
+    for _, obj in ipairs(item:GetDescendants()) do
+        if obj:IsA("WeldConstraint") or obj:IsA("Weld") or obj:IsA("Motor6D") then
+            for _, side in ipairs({obj.Part0, obj.Part1}) do
+                if side then
+                    local char = side:FindFirstAncestorOfClass("Model")
+                    if isOtherCharacter(char) then
+                        return true
+                    end
+                end
+            end
+        end
+    end
+
+    return false
+end
+
+local function getItemPos(item)
+    if not item then return nil end
+    local prompt = item:FindFirstChild("PickupPrompt", true)
+    if prompt and prompt.Parent and prompt.Parent:IsA("BasePart") then
+        return prompt.Parent.Position
+    end
+    local part = item:FindFirstChildWhichIsA("BasePart", true)
+    if part then
+        return part.Position
+    end
+    return nil
+end
+
+local function getClosestItem()
+    if not root or not root.Parent then return nil end
+    local closest, minDist = nil, math.huge
+    local folder = workspace:FindFirstChild("SpawnedItems")
+    if not folder then return nil end
+
+    for _, prompt in ipairs(folder:GetDescendants()) do
+    if prompt:IsA("ProximityPrompt") and prompt.Name == "PickupPrompt" then
+        local model = prompt:FindFirstAncestorOfClass("Model")
+        if model and not isHeldBySomeoneElse(model)
+            and (model.Name == "Anvil" or model.Name == "BusStop" or model.Name == "IronSafe") then
+            local part = prompt.Parent
+            local pos = (part and part:IsA("BasePart")) and part.Position or nil
+            if pos and isValidPosition(pos) then
+                local dist = (pos - root.Position).Magnitude
+                if dist < minDist and dist < 600 then
+                    minDist = dist
+                    closest = model
+end
+                end
+            end
+        end
+    end
+    return closest
+end
+
+local function safeTeleport(targetPos, targetItem)
+    if not root or not root.Parent then return false end
+    if not isValidPosition(targetPos) then forceSafe() return false end
+    if targetItem and not isItemStillValid(targetItem) then forceSafe() return false end
+    
+    local current = root.Position
+    if not isValidPosition(current) then forceSafe() return false end
+    
+    root.AssemblyLinearVelocity = Vector3.zero
+    root.AssemblyAngularVelocity = Vector3.zero
+    
+    local totalDist = (targetPos - current).Magnitude
+    if totalDist > 700 then forceSafe() return false end
+    
+    if totalDist <= Settings.maxStep then
+        root.CFrame = CFrame.new(targetPos)
+        return true
+    end
+    
+    local steps = math.ceil(totalDist / Settings.maxStep)
+    for i = 1, steps do
+        if not running or not root or not root.Parent then forceSafe() return false end
+        if targetItem and not isItemStillValid(targetItem) then forceSafe() return false end
+        
+        local nextPos = current:Lerp(targetPos, i / steps)
+        if not isValidPosition(nextPos) then forceSafe() return false end
+        
+        root.CFrame = CFrame.new(nextPos)
+        root.AssemblyLinearVelocity = Vector3.zero
+        task.wait(Settings.stepDelay)
+    end
+    return true
+end
+
+local function pickupItem(item)
+    if not isItemStillValid(item) then return false end
+    local prompt = item:FindFirstChildWhichIsA("ProximityPrompt", true)
+    if prompt then
+        pcall(fireproximityprompt, prompt)
+        return true
+    end
+    return false
+end
+
+-- Считаем лучшую точку на зелёном круге
+local function getBestThrowPosition(fromPos)
+    local direction = (fromPos - holePos) * Vector3.new(1, 0, 1)
+    if direction.Magnitude < 1 then
+        direction = Vector3.new(0, 0, -1)
+    else
+        direction = direction.Unit
+    end
+    return holePos + direction * Settings.throwRadius + Vector3.new(0, THROW_HEIGHT, 0)
+end
+
+local function aimCameraAtHole()
+    local cam = workspace.CurrentCamera
+    if not cam or not root then return end
+    local camPos = root.Position + Vector3.new(0, 1.7, 0)
+    cam.CFrame = CFrame.lookAt(camPos, holePos + Vector3.new(0, 0.8, 0))
+end
+
+local function throwItem()
+    aimCameraAtHole()
+    task.wait(0.07)
+    
+    local vim = game:GetService("VirtualInputManager")
+    for i = 1, 2 do
+        pcall(function()
+            vim:SendMouseButtonEvent(0, 0, 0, true, game, 1)
+            task.wait(0.035)
+            vim:SendMouseButtonEvent(0, 0, 0, false, game, 1)
+        end)
+        task.wait(0.06)
+    end
+end
+
+local function resetHole()
+    pcall(function()
+        game:GetService("ReplicatedStorage").Remotes.HoleGiveMe:InvokeServer()
+    end)
+end
+
+-- ====================== ОСНОВНОЙ ЦИКЛ ======================
+task.spawn(function()
+    while true do
+        if running and root and root.Parent then
+            if not isValidPosition(root.Position) then
+                forceSafe()
+                task.wait(0.4)
+            end
+
+            local item = getClosestItem()
+            if item then
+                if isHeldBySomeoneElse(item) then
+                    task.wait(0.1)
+                else
+                    local itemPos = getItemPos(item)
+                    local ok = itemPos ~= nil
+
+                    if ok and isValidPosition(itemPos) then
+                        local success = safeTeleport(itemPos + Vector3.new(0, 2.8, 0), item)
+
+                        if success and isItemStillValid(item) then
+                            task.wait(0.13)
+
+                            if pickupItem(item) then
+                                task.wait(Settings.pickupWait)
+
+                                local throwPos = getBestThrowPosition(itemPos)
+
+                                if safeTeleport(throwPos, nil) then
+                                    task.wait(0.09)
+                                    throwItem()
+                                    task.wait(0.28)
+                                    deposited += 1
+                                else
+                                    forceSafe()
+                                end
+                            end
+                        else
+                            forceSafe()
+                        end
+                    else
+                        forceSafe()
+                    end
+                end
+            else
+                task.wait(0.35)
+            end
+        else
+            task.wait(0.2)
+        end
+        task.wait(0.03)
+    end
+end)
+
+-- ====================== GUI ======================
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "FarmHub"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+ScreenGui.Parent = game:GetService("CoreGui")
+
+-- Мини-кнопка
+local Mini = Instance.new("TextButton")
+Mini.Size = UDim2.new(0, 48, 0, 48)
+Mini.Position = UDim2.new(0, 20, 0.4, 0)
+Mini.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
+Mini.Text = "FH"
+Mini.TextColor3 = Color3.fromRGB(220, 220, 255)
+Mini.Font = Enum.Font.GothamBold
+Mini.TextSize = 16
+Mini.Visible = false
+Mini.Parent = ScreenGui
+
+Instance.new("UICorner", Mini).CornerRadius = UDim.new(0, 12)
+local MiniStroke = Instance.new("UIStroke", Mini)
+MiniStroke.Color = Color3.fromRGB(80, 80, 120)
+MiniStroke.Thickness = 1.5
+
+-- Главное окно
+local Main = Instance.new("Frame")
+Main.Size = UDim2.new(0, 520, 0, 360)
+Main.Position = UDim2.new(0.5, -260, 0.5, -180)
+Main.BackgroundColor3 = Color3.fromRGB(18, 18, 24)
+Main.BorderSizePixel = 0
+Main.Parent = ScreenGui
+
+Instance.new("UICorner", Main).CornerRadius = UDim.new(0, 12)
+local MainStroke = Instance.new("UIStroke", Main)
+MainStroke.Color = Color3.fromRGB(45, 45, 60)
+MainStroke.Thickness = 1.5
+
+-- Заголовок
+local TitleBar = Instance.new("Frame")
+TitleBar.Size = UDim2.new(1, 0, 0, 42)
+TitleBar.BackgroundColor3 = Color3.fromRGB(22, 22, 30)
+TitleBar.BorderSizePixel = 0
+TitleBar.Parent = Main
+
+Instance.new("UICorner", TitleBar).CornerRadius = UDim.new(0, 12)
+local TitleFix = Instance.new("Frame")
+TitleFix.Size = UDim2.new(1, 0, 0, 20)
+TitleFix.Position = UDim2.new(0, 0, 1, -20)
+TitleFix.BackgroundColor3 = Color3.fromRGB(22, 22, 30)
+TitleFix.BorderSizePixel = 0
+TitleFix.Parent = TitleBar
+
+local Title = Instance.new("TextLabel")
+Title.Size = UDim2.new(1, -90, 1, 0)
+Title.Position = UDim2.new(0, 15, 0, 0)
+Title.BackgroundTransparency = 1
+Title.Text = "Item Farm Hub"
+Title.TextColor3 = Color3.fromRGB(240, 240, 255)
+Title.Font = Enum.Font.GothamBold
+Title.TextSize = 16
+Title.TextXAlignment = Enum.TextXAlignment.Left
+Title.Parent = TitleBar
+
+local MinBtn = Instance.new("TextButton")
+MinBtn.Size = UDim2.new(0, 32, 0, 32)
+MinBtn.Position = UDim2.new(1, -78, 0, 5)
+MinBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
+MinBtn.Text = "–"
+MinBtn.TextColor3 = Color3.fromRGB(220, 220, 230)
+MinBtn.Font = Enum.Font.GothamBold
+MinBtn.TextSize = 18
+MinBtn.Parent = TitleBar
+Instance.new("UICorner", MinBtn).CornerRadius = UDim.new(0, 8)
+
+local CloseBtn = Instance.new("TextButton")
+CloseBtn.Size = UDim2.new(0, 32, 0, 32)
+CloseBtn.Position = UDim2.new(1, -38, 0, 5)
+CloseBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
+CloseBtn.Text = "×"
+CloseBtn.TextColor3 = Color3.fromRGB(220, 220, 230)
+CloseBtn.Font = Enum.Font.GothamBold
+CloseBtn.TextSize = 18
+CloseBtn.Parent = TitleBar
+Instance.new("UICorner", CloseBtn).CornerRadius = UDim.new(0, 8)
+
+CloseBtn.MouseButton1Click:Connect(function()
+    ScreenGui:Destroy()
+    running = false
+end)
+
+local function setMinimized(state)
+    minimized = state
+    Main.Visible = not state
+    Mini.Visible = state
+end
+
+MinBtn.MouseButton1Click:Connect(function() setMinimized(true) end)
+Mini.MouseButton1Click:Connect(function() setMinimized(false) end)
+
+-- Боковое меню
+local Side = Instance.new("Frame")
+Side.Size = UDim2.new(0, 140, 1, -42)
+Side.Position = UDim2.new(0, 0, 0, 42)
+Side.BackgroundColor3 = Color3.fromRGB(22, 22, 30)
+Side.BorderSizePixel = 0
+Side.Parent = Main
+
+local function createTabButton(name, order)
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(1, -16, 0, 36)
+    btn.Position = UDim2.new(0, 8, 0, 12 + (order - 1) * 44)
+    btn.BackgroundColor3 = Color3.fromRGB(30, 30, 42)
+    btn.Text = "  " .. name
+    btn.TextColor3 = Color3.fromRGB(180, 180, 200)
+    btn.Font = Enum.Font.Gotham
+    btn.TextSize = 14
+    btn.TextXAlignment = Enum.TextXAlignment.Left
+    btn.Parent = Side
+    Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 8)
+    return btn
+end
+
+local TabMain = createTabButton("Main", 1)
+local TabPlayer = createTabButton("Player", 2)
+local TabSettings = createTabButton("Settings", 3)
+local TabInfo = createTabButton("Info", 4)
+
+local Content = Instance.new("Frame")
+Content.Size = UDim2.new(1, -150, 1, -52)
+Content.Position = UDim2.new(0, 145, 0, 48)
+Content.BackgroundTransparency = 1
+Content.Parent = Main
+
+-- ========== MAIN PAGE ==========
+local MainPage = Instance.new("Frame")
+MainPage.Size = UDim2.new(1, 0, 1, 0)
+MainPage.BackgroundTransparency = 1
+MainPage.Parent = Content
+
+local StatusLabel = Instance.new("TextLabel")
+StatusLabel.Size = UDim2.new(1, -20, 0, 24)
+StatusLabel.Position = UDim2.new(0, 10, 0, 8)
+StatusLabel.BackgroundTransparency = 1
+StatusLabel.Text = "Status: Stopped"
+StatusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
+StatusLabel.Font = Enum.Font.GothamMedium
+StatusLabel.TextSize = 14
+StatusLabel.TextXAlignment = Enum.TextXAlignment.Left
+StatusLabel.Parent = MainPage
+
+local DepositedLabel = Instance.new("TextLabel")
+DepositedLabel.Size = UDim2.new(1, -20, 0, 22)
+DepositedLabel.Position = UDim2.new(0, 10, 0, 32)
+DepositedLabel.BackgroundTransparency = 1
+DepositedLabel.Text = "Deposited: 0"
+DepositedLabel.TextColor3 = Color3.fromRGB(160, 160, 180)
+DepositedLabel.Font = Enum.Font.Gotham
+DepositedLabel.TextSize = 13
+DepositedLabel.TextXAlignment = Enum.TextXAlignment.Left
+DepositedLabel.Parent = MainPage
+
+-- Функция создания красивого тоггла
+local function createToggle(parent, text, yPos, defaultState, callback)
+    local frame = Instance.new("Frame")
+    frame.Size = UDim2.new(1, -20, 0, 42)
+    frame.Position = UDim2.new(0, 10, 0, yPos)
+    frame.BackgroundColor3 = Color3.fromRGB(32, 32, 44)
+    frame.Parent = parent
+    Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 8)
+    
+    local label = Instance.new("TextLabel")
+    label.Size = UDim2.new(1, -70, 1, 0)
+    label.Position = UDim2.new(0, 12, 0, 0)
+    label.BackgroundTransparency = 1
+    label.Text = text
+    label.TextColor3 = Color3.fromRGB(220, 220, 235)
+    label.Font = Enum.Font.Gotham
+    label.TextSize = 14
+    label.TextXAlignment = Enum.TextXAlignment.Left
+    label.Parent = frame
+    
+    local toggleBtn = Instance.new("TextButton")
+    toggleBtn.Size = UDim2.new(0, 50, 0, 26)
+    toggleBtn.Position = UDim2.new(1, -60, 0.5, -13)
+    toggleBtn.BackgroundColor3 = defaultState and Color3.fromRGB(70, 140, 90) or Color3.fromRGB(60, 60, 75)
+    toggleBtn.Text = defaultState and "ON" or "OFF"
+    toggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    toggleBtn.Font = Enum.Font.GothamBold
+    toggleBtn.TextSize = 12
+    toggleBtn.Parent = frame
+    Instance.new("UICorner", toggleBtn).CornerRadius = UDim.new(0, 6)
+    
+    local state = defaultState
+    toggleBtn.MouseButton1Click:Connect(function()
+        state = not state
+        toggleBtn.BackgroundColor3 = state and Color3.fromRGB(70, 140, 90) or Color3.fromRGB(60, 60, 75)
+        toggleBtn.Text = state and "ON" or "OFF"
+        callback(state)
+    end)
+    
+    return function(newState) -- возможность обновить снаружи
+        state = newState
+        toggleBtn.BackgroundColor3 = state and Color3.fromRGB(70, 140, 90) or Color3.fromRGB(60, 60, 75)
+        toggleBtn.Text = state and "ON" or "OFF"
+    end
+end
+
+local updateFarmToggle = createToggle(MainPage, "Auto Farm", 70, false, function(state)
+    running = state
+    StatusLabel.Text = state and "Status: Running" or "Status: Stopped"
+    StatusLabel.TextColor3 = state and Color3.fromRGB(100, 255, 140) or Color3.fromRGB(255, 100, 100)
+end)
+
+local updateResetToggle = createToggle(MainPage, "Auto Reset Scale", 125, true, function(state)
+    autoReset = state
+end)
+
+-- ========== PLAYER PAGE ==========
+local PlayerPage = Instance.new("Frame")
+PlayerPage.Size = UDim2.new(1, 0, 1, 0)
+PlayerPage.BackgroundTransparency = 1
+PlayerPage.Visible = false
+PlayerPage.Parent = Content
+
+local function createPlayerControl(name, yPos, defaultValue, callback)
+    local label = Instance.new("TextLabel")
+    label.Size = UDim2.new(0.5, 0, 0, 28)
+    label.Position = UDim2.new(0, 10, 0, yPos)
+    label.BackgroundTransparency = 1
+    label.Text = name
+    label.TextColor3 = Color3.fromRGB(190, 190, 210)
+    label.Font = Enum.Font.Gotham
+    label.TextSize = 14
+    label.TextXAlignment = Enum.TextXAlignment.Left
+    label.Parent = PlayerPage
+    
+    local box = Instance.new("TextBox")
+    box.Size = UDim2.new(0.38, 0, 0, 30)
+    box.Position = UDim2.new(0.55, 0, 0, yPos)
+    box.BackgroundColor3 = Color3.fromRGB(35, 35, 48)
+    box.Text = tostring(defaultValue)
+    box.TextColor3 = Color3.fromRGB(230, 230, 245)
+    box.Font = Enum.Font.Gotham
+    box.TextSize = 14
+    box.Parent = PlayerPage
+    Instance.new("UICorner", box).CornerRadius = UDim.new(0, 6)
+    
+    box.FocusLost:Connect(function()
+        local num = tonumber(box.Text)
+        if num and humanoid then
+            callback(num)
+            box.Text = tostring(num)
+        end
+    end)
+end
+
+createPlayerControl("WalkSpeed", 20, 16, function(v)
+    if humanoid then humanoid.WalkSpeed = v end
+end)
+
+createPlayerControl("JumpPower", 70, 50, function(v)
+    if humanoid then humanoid.JumpPower = v end
+end)
+
+local PlayerHint = Instance.new("TextLabel")
+PlayerHint.Size = UDim2.new(1, -20, 0, 40)
+PlayerHint.Position = UDim2.new(0, 10, 0, 130)
+PlayerHint.BackgroundTransparency = 1
+PlayerHint.Text = "Значения применяются сразу\nпосле нажатия Enter"
+PlayerHint.TextColor3 = Color3.fromRGB(140, 140, 160)
+PlayerHint.Font = Enum.Font.Gotham
+PlayerHint.TextSize = 12
+PlayerHint.TextXAlignment = Enum.TextXAlignment.Left
+PlayerHint.Parent = PlayerPage
+
+-- ========== SETTINGS PAGE ==========
+local SettingsPage = Instance.new("Frame")
+SettingsPage.Size = UDim2.new(1, 0, 1, 0)
+SettingsPage.BackgroundTransparency = 1
+SettingsPage.Visible = false
+SettingsPage.Parent = Content
+
+local function createSetting(name, yPos, default, callback)
+    local label = Instance.new("TextLabel")
+    label.Size = UDim2.new(0.55, 0, 0, 28)
+    label.Position = UDim2.new(0, 10, 0, yPos)
+    label.BackgroundTransparency = 1
+    label.Text = name
+    label.TextColor3 = Color3.fromRGB(190, 190, 210)
+    label.Font = Enum.Font.Gotham
+    label.TextSize = 14
+    label.TextXAlignment = Enum.TextXAlignment.Left
+    label.Parent = SettingsPage
+    
+    local box = Instance.new("TextBox")
+    box.Size = UDim2.new(0.35, 0, 0, 28)
+    box.Position = UDim2.new(0.6, 0, 0, yPos)
+    box.BackgroundColor3 = Color3.fromRGB(35, 35, 48)
+    box.Text = tostring(default)
+    box.TextColor3 = Color3.fromRGB(230, 230, 245)
+    box.Font = Enum.Font.Gotham
+    box.TextSize = 14
+    box.Parent = SettingsPage
+    Instance.new("UICorner", box).CornerRadius = UDim.new(0, 6)
+    
+    box.FocusLost:Connect(function()
+        local num = tonumber(box.Text)
+        if num then
+            callback(num)
+            box.Text = tostring(num)
+        end
+    end)
+end
+
+createSetting("Max Step (studs)", 15, Settings.maxStep, function(v) Settings.maxStep = v end)
+createSetting("Step Delay (sec)", 55, Settings.stepDelay, function(v) Settings.stepDelay = v end)
+createSetting("Pickup Wait", 95, Settings.pickupWait, function(v) Settings.pickupWait = v end)
+createSetting("Clicks in Hole", 135, Settings.depositClicks, function(v) Settings.depositClicks = v end)
+createSetting("Reset Every X items", 175, Settings.resetEvery, function(v) Settings.resetEvery = v end)
+createSetting("Throw Radius", 215, Settings.throwRadius, function(v) Settings.throwRadius = v end)
+
+-- ========== INFO PAGE ==========
+local InfoPage = Instance.new("Frame")
+InfoPage.Size = UDim2.new(1, 0, 1, 0)
+InfoPage.BackgroundTransparency = 1
+InfoPage.Visible = false
+InfoPage.Parent = Content
+
+local InfoText = Instance.new("TextLabel")
+InfoText.Size = UDim2.new(1, -20, 1, -20)
+InfoText.Position = UDim2.new(0, 10, 0, 10)
+InfoText.BackgroundTransparency = 1
+InfoText.Text = "Item Farm Hub\n\n• Auto Farm + Auto Reset Scale\n• Защита от улёта\n• Работает после смерти\n• Вкладка Player (скорость/прыжок)\n\nF — быстрый старт/стоп\n–  — свернуть в квадратик"
+InfoText.TextColor3 = Color3.fromRGB(170, 170, 190)
+InfoText.Font = Enum.Font.Gotham
+InfoText.TextSize = 14
+InfoText.TextXAlignment = Enum.TextXAlignment.Left
+InfoText.TextYAlignment = Enum.TextYAlignment.Top
+InfoText.Parent = InfoPage
+
+-- Переключение вкладок
+local function switchTab(tab)
+    currentTab = tab
+    MainPage.Visible = (tab == "Main")
+    PlayerPage.Visible = (tab == "Player")
+    SettingsPage.Visible = (tab == "Settings")
+    InfoPage.Visible = (tab == "Info")
+    
+    local active = Color3.fromRGB(55, 55, 80)
+    local inactive = Color3.fromRGB(30, 30, 42)
+    local activeText = Color3.fromRGB(255, 255, 255)
+    local inactiveText = Color3.fromRGB(180, 180, 200)
+    
+    TabMain.BackgroundColor3 = (tab == "Main") and active or inactive
+    TabPlayer.BackgroundColor3 = (tab == "Player") and active or inactive
+    TabSettings.BackgroundColor3 = (tab == "Settings") and active or inactive
+    TabInfo.BackgroundColor3 = (tab == "Info") and active or inactive
+    
+    TabMain.TextColor3 = (tab == "Main") and activeText or inactiveText
+    TabPlayer.TextColor3 = (tab == "Player") and activeText or inactiveText
+    TabSettings.TextColor3 = (tab == "Settings") and activeText or inactiveText
+    TabInfo.TextColor3 = (tab == "Info") and activeText or inactiveText
+end
+
+TabMain.MouseButton1Click:Connect(function() switchTab("Main") end)
+TabPlayer.MouseButton1Click:Connect(function() switchTab("Player") end)
+TabSettings.MouseButton1Click:Connect(function() switchTab("Settings") end)
+TabInfo.MouseButton1Click:Connect(function() switchTab("Info") end)
+
+-- Обновление счётчика + синхронизация тоггла
+task.spawn(function()
+    while ScreenGui.Parent do
+        DepositedLabel.Text = "Deposited: " .. deposited
+        updateFarmToggle(running)
+        task.wait(0.35)
+    end
+end)
+
+-- Клавиша F
+UIS.InputBegan:Connect(function(input, gp)
+    if gp then return end
+    if input.KeyCode == Enum.KeyCode.F then
+        running = not running
+        updateFarmToggle(running)
+        StatusLabel.Text = running and "Status: Running" or "Status: Stopped"
+        StatusLabel.TextColor3 = running and Color3.fromRGB(100, 255, 140) or Color3.fromRGB(255, 100, 100)
+    end
+end)
+
+-- Перетаскивание
+local function makeDraggable(frame, handle)
+    local dragging, dragInput, dragStart, startPos
+    handle.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = true
+            dragStart = input.Position
+            startPos = frame.Position
+            input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then dragging = false end
+            end)
+        end
+    end)
+    handle.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement then dragInput = input end
+    end)
+    UIS.InputChanged:Connect(function(input)
+        if input == dragInput and dragging then
+            local delta = input.Position - dragStart
+            frame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+        end
+    end)
+end
+
+-- Независимый автосброс шкалы
+task.spawn(function()
+    while task.wait(3) do
+        if autoReset then
+            pcall(function()
+                game:GetService("ReplicatedStorage").Remotes.HoleGiveMe:InvokeServer()
+            end)
+        end
+    end
+end)
+
+makeDraggable(Main, TitleBar)
+makeDraggable(Mini, Mini)
+
+switchTab("Main")
+print("Farm Hub обновлён | Вкладка Player добавлена")
