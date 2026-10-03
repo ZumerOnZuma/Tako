@@ -102,13 +102,6 @@ local function loadConfig()
 end
 
 loadConfig()
-pcall(function()
-    if delfile then
-        delfile(CONFIG_FILE)
-    end
-end)
-running = false
-autoReset = false
 print("config check done")
 
 local function readText(obj)
