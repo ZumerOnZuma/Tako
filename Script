@@ -12,7 +12,7 @@ local Zones = {
     [1] = {
         name = "1 зона",
         hole = nil,
-        items = {"Chocolate bar", "TrashBox", "Calendars", "Battery", "Crate"},
+        items = {"Chocolate bar", "Trash Box", "Calendars", "Battery", "Crate"},
     },
     [2] = {
         name = "2 зона",
@@ -209,6 +209,17 @@ local function nameOk(n)
     return table.find(itemNames, n) ~= nil
 end
 
+local function namedItem(prompt)
+    local current = prompt
+    while current and current ~= workspace do
+        if current:IsA("Model") and nameOk(current.Name) then
+            return current
+        end
+        current = current.Parent
+    end
+    return nil
+end
+
 local function getClosestItem()
     if not root or not root.Parent then return nil end
     local closest, minDist = nil, math.huge
@@ -217,10 +228,16 @@ local function getClosestItem()
 
     for _, prompt in ipairs(folder:GetDescendants()) do
         if prompt:IsA("ProximityPrompt") and prompt.Name == "PickupPrompt" then
-            local model = prompt:FindFirstAncestorOfClass("Model")
-            if model and nameOk(model.Name) and not isHeldBySomeoneElse(model) then
+            local model = namedItem(prompt)
+            if model and not isHeldBySomeoneElse(model) then
                 local part = prompt.Parent
-                local pos = (part and part:IsA("BasePart")) and part.Position or nil
+                local pos
+                if part and part:IsA("BasePart") then
+                    pos = part.Position
+                else
+                    local any = model:FindFirstChildWhichIsA("BasePart", true)
+                    pos = any and any.Position
+                end
                 if pos and isValidPosition(pos) then
                     local dist = (pos - root.Position).Magnitude
                     if dist < minDist and dist < 600 then
