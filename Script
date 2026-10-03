@@ -27,7 +27,7 @@ local Zones = {
     [4] = {
         name = "4 зона",
         hole = Vector3.new(89, -9, 78),
-        items = {"Aquarium", "Barrier", "ROADROLLEEEEERR", "Pigeon"},
+        items = {"Aquarium", "Barrier", "ROADROLLEEEEERR", "Pigeon", "carp"},
     },
 }
 
