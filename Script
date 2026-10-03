@@ -425,21 +425,19 @@ task.spawn(function()
                 if item and not isHeldBySomeoneElse(item) then
                     local itemPos = getItemPos(item)
                     if itemPos and isValidPosition(itemPos) then
-                        -- === ROADROLLEEEEERR: маленький шаг только при подходе ===
                         local originalMaxStep = Settings.maxStep
                         local isRoadroller = string.lower((item.Name or ""):gsub("%s+", "")) == "roadrolleeeeerr"
-                        if isRoadroller then
-                            Settings.maxStep = 1.1
-                        end
 
                         local success = safeTeleport(itemPos + Vector3.new(0, 2.8, 0), item)
-
-                        -- возвращаем обычный шаг сразу после подхода
-                        Settings.maxStep = originalMaxStep
 
                         if success and isItemStillValid(item) then
                             task.wait(0.13)
                             if pickupItem(item) then
+                                -- после поднятия ROADROLLEEEEERR уменьшаем шаг
+                                if isRoadroller then
+                                    Settings.maxStep = 1.1
+                                end
+
                                 task.wait(Settings.pickupWait)
                                 local throwPos = getBestThrowPosition(itemPos)
                                 if safeTeleport(throwPos, nil) then
@@ -450,6 +448,9 @@ task.spawn(function()
                                 else
                                     forceSafe()
                                 end
+
+                                -- после броска (или если бросок не удался) возвращаем обычный шаг
+                                Settings.maxStep = originalMaxStep
                             end
                         else
                             forceSafe()
