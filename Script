@@ -108,6 +108,13 @@ local function loadConfig()
 end
 
 loadConfig()
+pcall(function()
+    if delfile then
+        delfile(CONFIG_FILE)
+    end
+end)
+running = false
+autoReset = false
 print("config check done")
 
 local function readText(obj)
@@ -174,8 +181,9 @@ local function setupCharacter(char)
     root = character:WaitForChild("HumanoidRootPart", 8)
     humanoid = character:WaitForChild("Humanoid", 8)
     if humanoid then
-        humanoid.WalkSpeed = walkSpeed
-        humanoid.JumpPower = jumpPower
+        pcall(function()
+            humanoid.WalkSpeed = walkSpeed
+        end)
         humanoid.Died:Connect(function()
             running = false
         end)
