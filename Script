@@ -181,9 +181,6 @@ local function setupCharacter(char)
     root = character:WaitForChild("HumanoidRootPart", 8)
     humanoid = character:WaitForChild("Humanoid", 8)
     if humanoid then
-        pcall(function()
-            humanoid.WalkSpeed = walkSpeed
-        end)
         humanoid.Died:Connect(function()
             running = false
         end)
