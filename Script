@@ -44,8 +44,6 @@ local running = false
 local autoReset = false
 local currentTab = "Main"
 local minimized = false
-local walkSpeed = 16
-local jumpPower = 50
 
 local CONFIG_FILE = "farmhub_config.json"
 local HttpService = game:GetService("HttpService")
@@ -55,8 +53,6 @@ local function saveConfig()
         zone = currentZone,
         running = running,
         autoReset = autoReset,
-        walkSpeed = walkSpeed,
-        jumpPower = jumpPower,
         maxStep = Settings.maxStep,
         stepDelay = Settings.stepDelay,
         pickupWait = Settings.pickupWait,
@@ -98,8 +94,6 @@ local function loadConfig()
     if data.stepDelay then Settings.stepDelay = data.stepDelay end
     if data.pickupWait then Settings.pickupWait = data.pickupWait end
     if data.throwRadius then Settings.throwRadius = data.throwRadius end
-    if data.walkSpeed then walkSpeed = data.walkSpeed end
-    if data.jumpPower then jumpPower = data.jumpPower end
     running = data.running == true
     autoReset = data.autoReset == true
     holePos = Zones[currentZone].hole
