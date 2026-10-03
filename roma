@@ -753,4 +753,3 @@ makeDraggable(Main, TitleBar)
 makeDraggable(Mini, Mini)
 switchTab("Main")
 print("Farm Hub: зоны на Main")
-file_path``/workspace/artifacts/farmhub.lua
