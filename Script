@@ -12,7 +12,7 @@ local Zones = {
     [1] = {
         name = "1 зона",
         hole = nil,
-        items = {"Chocolate bar", "TrashBox", "Calendars", "Battery", "Crate", "Wallet"},
+        items = {"Chocolate bar", "Trash Box", "Calendars", "Battery", "Crate"},
     },
     [2] = {
         name = "2 зона",
@@ -44,6 +44,60 @@ local running = false
 local autoReset = false
 local currentTab = "Main"
 local minimized = false
+local walkSpeed = 16
+local jumpPower = 50
+
+local CONFIG_FILE = "farmhub_config.json"
+local HttpService = game:GetService("HttpService")
+
+local function saveConfig()
+    local data = {
+        zone = currentZone,
+        running = running,
+        autoReset = autoReset,
+        walkSpeed = walkSpeed,
+        jumpPower = jumpPower,
+        maxStep = Settings.maxStep,
+        stepDelay = Settings.stepDelay,
+        pickupWait = Settings.pickupWait,
+        throwRadius = Settings.throwRadius,
+    }
+    pcall(function()
+        writefile(CONFIG_FILE, HttpService:JSONEncode(data))
+    end)
+end
+
+local function loadConfig()
+    local ok, raw = pcall(function()
+        if isfile and isfile(CONFIG_FILE) then
+            return readfile(CONFIG_FILE)
+        end
+    end)
+    if not ok or type(raw) ~= "string" or raw == "" then
+        return
+    end
+    local decodedOk, data = pcall(function()
+        return HttpService:JSONDecode(raw)
+    end)
+    if not decodedOk or type(data) ~= "table" then
+        return
+    end
+    if data.zone == 1 or data.zone == 2 or data.zone == 3 then
+        currentZone = data.zone
+    end
+    if data.maxStep then Settings.maxStep = data.maxStep end
+    if data.stepDelay then Settings.stepDelay = data.stepDelay end
+    if data.pickupWait then Settings.pickupWait = data.pickupWait end
+    if data.throwRadius then Settings.throwRadius = data.throwRadius end
+    if data.walkSpeed then walkSpeed = data.walkSpeed end
+    if data.jumpPower then jumpPower = data.jumpPower end
+    running = data.running == true
+    autoReset = data.autoReset == true
+    holePos = Zones[currentZone].hole
+    itemNames = Zones[currentZone].items
+end
+
+loadConfig()
 
 local function readText(obj)
     if not obj then return "" end
@@ -98,6 +152,7 @@ local function applyZone(id)
     else
         holePos = Zones[id].hole
     end
+    saveConfig()
 end
 
 -- ====================== ПЕРСОНАЖ ======================
@@ -108,6 +163,8 @@ local function setupCharacter(char)
     root = character:WaitForChild("HumanoidRootPart", 8)
     humanoid = character:WaitForChild("Humanoid", 8)
     if humanoid then
+        humanoid.WalkSpeed = walkSpeed
+        humanoid.JumpPower = jumpPower
         humanoid.Died:Connect(function()
             running = false
         end)
@@ -206,7 +263,16 @@ local function isItemStillValid(item)
 end
 
 local function nameOk(n)
-    return table.find(itemNames, n) ~= nil
+    local function clean(s)
+        return string.lower((s or ""):gsub("%s+", ""))
+    end
+    local want = clean(n)
+    for _, itemName in ipairs(itemNames) do
+        if clean(itemName) == want then
+            return true
+        end
+    end
+    return false
 end
 
 local function namedItem(prompt)
@@ -663,14 +729,16 @@ local function createToggle(parent, text, yPos, defaultState, callback)
     end
 end
 
-local updateFarmToggle = createToggle(MainPage, "Автофарм", 118, false, function(state)
+local updateFarmToggle = createToggle(MainPage, "Автофарм", 118, running, function(state)
     running = state
     StatusLabel.Text = state and "Status: Running" or "Status: Stopped"
     StatusLabel.TextColor3 = state and Color3.fromRGB(100, 255, 140) or Color3.fromRGB(255, 100, 100)
+    saveConfig()
 end)
 
-local updateResetToggle = createToggle(MainPage, "Автосдача", 168, false, function(state)
+local updateResetToggle = createToggle(MainPage, "Автосдача", 168, autoReset, function(state)
     autoReset = state
+    saveConfig()
 end)
 
 local ZoneHint = Instance.new("TextLabel")
@@ -722,11 +790,15 @@ local function createPlayerControl(name, yPos, defaultValue, callback)
     end)
 end
 
-createPlayerControl("WalkSpeed", 20, 16, function(v)
+createPlayerControl("WalkSpeed", 20, walkSpeed, function(v)
+    walkSpeed = v
     if humanoid then humanoid.WalkSpeed = v end
+    saveConfig()
 end)
-createPlayerControl("JumpPower", 70, 50, function(v)
+createPlayerControl("JumpPower", 70, jumpPower, function(v)
+    jumpPower = v
     if humanoid then humanoid.JumpPower = v end
+    saveConfig()
 end)
 
 local SettingsPage = Instance.new("Frame")
@@ -767,10 +839,10 @@ local function createSetting(name, yPos, default, callback)
     end)
 end
 
-createSetting("Max Step (studs)", 15, Settings.maxStep, function(v) Settings.maxStep = v end)
-createSetting("Step Delay (sec)", 55, Settings.stepDelay, function(v) Settings.stepDelay = v end)
-createSetting("Pickup Wait", 95, Settings.pickupWait, function(v) Settings.pickupWait = v end)
-createSetting("Throw Radius", 135, Settings.throwRadius, function(v) Settings.throwRadius = v end)
+createSetting("Max Step (studs)", 15, Settings.maxStep, function(v) Settings.maxStep = v saveConfig() end)
+createSetting("Step Delay (sec)", 55, Settings.stepDelay, function(v) Settings.stepDelay = v saveConfig() end)
+createSetting("Pickup Wait", 95, Settings.pickupWait, function(v) Settings.pickupWait = v saveConfig() end)
+createSetting("Throw Radius", 135, Settings.throwRadius, function(v) Settings.throwRadius = v saveConfig() end)
 
 local InfoPage = Instance.new("Frame")
 InfoPage.Size = UDim2.new(1, 0, 1, 0)
@@ -836,6 +908,7 @@ UIS.InputBegan:Connect(function(input, gp)
         updateFarmToggle(running)
         StatusLabel.Text = running and "Status: Running" or "Status: Stopped"
         StatusLabel.TextColor3 = running and Color3.fromRGB(100, 255, 140) or Color3.fromRGB(255, 100, 100)
+        saveConfig()
     end
 end)
 
