@@ -251,6 +251,10 @@ end
 
 local function getItemPos(item)
     if not item then return nil end
+    -- если сам предмет — Part/MeshPart (как carp)
+    if item:IsA("BasePart") then
+        return item.Position
+    end
     local prompt = item:FindFirstChild("PickupPrompt", true)
     if prompt and prompt.Parent and prompt.Parent:IsA("BasePart") then
         return prompt.Parent.Position
@@ -286,7 +290,8 @@ end
 local function namedItem(prompt)
     local current = prompt
     while current and current ~= workspace do
-        if current:IsA("Model") and nameOk(current.Name) then
+        -- убрали IsA("Model") — теперь работает и для Part / MeshPart / Folder (как carp)
+        if nameOk(current.Name) then
             return current
         end
         current = current.Parent
@@ -420,7 +425,18 @@ task.spawn(function()
                 if item and not isHeldBySomeoneElse(item) then
                     local itemPos = getItemPos(item)
                     if itemPos and isValidPosition(itemPos) then
+                        -- === ROADROLLEEEEERR: маленький шаг только при подходе ===
+                        local originalMaxStep = Settings.maxStep
+                        local isRoadroller = string.lower((item.Name or ""):gsub("%s+", "")) == "roadrolleeeeerr"
+                        if isRoadroller then
+                            Settings.maxStep = 1.1
+                        end
+
                         local success = safeTeleport(itemPos + Vector3.new(0, 2.8, 0), item)
+
+                        -- возвращаем обычный шаг сразу после подхода
+                        Settings.maxStep = originalMaxStep
+
                         if success and isItemStillValid(item) then
                             task.wait(0.13)
                             if pickupItem(item) then
