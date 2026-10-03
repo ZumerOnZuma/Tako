@@ -12,7 +12,7 @@ local Zones = {
     [1] = {
         name = "1 зона",
         hole = nil,
-        items = {"Chocolate bar", "TrashBox", "Calendars", "Battery", "Crate"},
+        items = {"Chocolate bar", "Trash Box", "Calendars", "Battery", "Crate"},
     },
     [2] = {
         name = "2 зона",
@@ -62,9 +62,18 @@ local function saveConfig()
         pickupWait = Settings.pickupWait,
         throwRadius = Settings.throwRadius,
     }
-    pcall(function()
-        writefile(CONFIG_FILE, HttpService:JSONEncode(data))
-    end)
+    local payload = HttpService:JSONEncode(data)
+    if type(writefile) ~= "function" then
+        warn("config: writefile нет в executor")
+        return false
+    end
+    local ok, err = pcall(writefile, CONFIG_FILE, payload)
+    if not ok then
+        warn("config save failed: " .. tostring(err))
+        return false
+    end
+    print("config saved")
+    return true
 end
 
 local function loadConfig()
@@ -95,9 +104,11 @@ local function loadConfig()
     autoReset = data.autoReset == true
     holePos = Zones[currentZone].hole
     itemNames = Zones[currentZone].items
+    return true
 end
 
 loadConfig()
+print("config check done")
 
 local function readText(obj)
     if not obj then return "" end
