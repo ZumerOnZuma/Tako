@@ -801,7 +801,7 @@ local function clearDustSiteObstacles()
     print("DustSite: удалено объектов —", removed)
 end
 
--- Кнопка в стиле GUI (как тогглы)
+- Кнопка в стиле GUI (как тогглы)
 local ClearFrame = Instance.new("Frame")
 ClearFrame.Size = UDim2.new(1, -20, 0, 42)
 ClearFrame.Position = UDim2.new(0, 10, 0, 220)
@@ -810,16 +810,16 @@ ClearFrame.Parent = MainPage
 Instance.new("UICorner", ClearFrame).CornerRadius = UDim.new(0, 8)
 
 local ClearBtn = Instance.new("TextButton")
-ClearBtn.Size = UDim2.new(1, -16, 1, -10)
-ClearBtn.Position = UDim2.fromOffset(8, 5)
-ClearBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
-ClearBtn.Text = "Убрать преграды (CLIENT)     👆"
+ClearBtn.Size = UDim2.new(1, 0, 1, 0)
+ClearBtn.Position = UDim2.new(0, 0, 0, 0)
+ClearBtn.BackgroundTransparency = 1
+ClearBtn.AutoButtonColor = false
+ClearBtn.Text = "  Убрать преграды (CLIENT)     👆"
 ClearBtn.TextColor3 = Color3.fromRGB(220, 220, 235)
 ClearBtn.Font = Enum.Font.Gotham
 ClearBtn.TextSize = 14
 ClearBtn.TextXAlignment = Enum.TextXAlignment.Left
 ClearBtn.Parent = ClearFrame
-Instance.new("UICorner", ClearBtn).CornerRadius = UDim.new(0, 6)
 
 ClearBtn.MouseButton1Click:Connect(function()
     clearDustSiteObstacles()
@@ -829,7 +829,7 @@ local ZoneHint = Instance.new("TextLabel")
 ZoneHint.Size = UDim2.new(1, -20, 0, 28)
 ZoneHint.Position = UDim2.new(0, 10, 0, 264)
 ZoneHint.BackgroundTransparency = 1
-ZoneHint.Text = "1 и 2 зона пока без предметов. Автосдача отдельно."
+ZoneHint.Text = "By: Sin_Tako; Sponsor: Тимофей"
 ZoneHint.TextColor3 = Color3.fromRGB(140, 140, 160)
 ZoneHint.Font = Enum.Font.Gotham
 ZoneHint.TextSize = 12
