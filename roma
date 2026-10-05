@@ -184,6 +184,53 @@ player.CharacterAdded:Connect(function(char)
     setupCharacter(char)
 end)
 
+-- ====================== SAFE FARM PLATFORM ======================
+local SAFE_POS = Vector3.new(73, 4, 1705)
+local safePlatform = nil
+
+local function destroySafePlatform()
+    if safePlatform and safePlatform.Parent then
+        safePlatform:Destroy()
+    end
+    safePlatform = nil
+end
+
+local function createSafePlatform()
+    destroySafePlatform()
+    local part = Instance.new("Part")
+    part.Name = "SafeFarmPlatform"
+    part.Size = Vector3.new(12, 1, 12)
+    part.Position = SAFE_POS + Vector3.new(0, -3, 0)
+    part.Anchored = true
+    part.CanCollide = true
+    part.Transparency = 0.3
+    part.Material = Enum.Material.Neon
+    part.Color = Color3.fromRGB(40, 180, 90)
+    part.TopSurface = Enum.SurfaceType.Smooth
+    part.BottomSurface = Enum.SurfaceType.Smooth
+    part.Parent = workspace
+
+    local light = Instance.new("PointLight")
+    light.Brightness = 1.2
+    light.Range = 14
+    light.Color = Color3.fromRGB(80, 255, 120)
+    light.Parent = part
+
+    safePlatform = part
+end
+
+local function teleportToSafeFarm()
+    if not root or not root.Parent then
+        warn("Нет персонажа для телепорта")
+        return
+    end
+    createSafePlatform()
+    root.AssemblyLinearVelocity = Vector3.zero
+    root.AssemblyAngularVelocity = Vector3.zero
+    root.CFrame = CFrame.new(SAFE_POS + Vector3.new(0, 3, 0))
+    print("Safe Farm: телепорт + платформа")
+end
+
 local THROW_HEIGHT = 3.2
 
 local function safePos()
@@ -761,9 +808,25 @@ local updateResetToggle = createToggle(MainPage, "Автосдача", 168, auto
     saveConfig()
 end)
 
+-- Кнопка Safe Farm (телепорт + платформа)
+local SafeFarmBtn = Instance.new("TextButton")
+SafeFarmBtn.Size = UDim2.new(1, -20, 0, 36)
+SafeFarmBtn.Position = UDim2.new(0, 10, 0, 220)
+SafeFarmBtn.BackgroundColor3 = Color3.fromRGB(40, 140, 90)
+SafeFarmBtn.Text = "🛡️ Safe Farm (TP + Platform)"
+SafeFarmBtn.TextColor3 = Color3.new(1, 1, 1)
+SafeFarmBtn.Font = Enum.Font.GothamBold
+SafeFarmBtn.TextSize = 14
+SafeFarmBtn.Parent = MainPage
+Instance.new("UICorner", SafeFarmBtn).CornerRadius = UDim.new(0, 8)
+
+SafeFarmBtn.MouseButton1Click:Connect(function()
+    teleportToSafeFarm()
+end)
+
 local ZoneHint = Instance.new("TextLabel")
 ZoneHint.Size = UDim2.new(1, -20, 0, 36)
-ZoneHint.Position = UDim2.new(0, 10, 0, 218)
+ZoneHint.Position = UDim2.new(0, 10, 0, 266)
 ZoneHint.BackgroundTransparency = 1
 ZoneHint.Text = "1 и 2 зона пока без предметов.\nАвтосдача работает отдельно от фарма."
 ZoneHint.TextColor3 = Color3.fromRGB(140, 140, 160)
