@@ -184,53 +184,6 @@ player.CharacterAdded:Connect(function(char)
     setupCharacter(char)
 end)
 
--- ====================== SAFE FARM PLATFORM ======================
-local SAFE_POS = Vector3.new(73, 4, 1705)
-local safePlatform = nil
-
-local function destroySafePlatform()
-    if safePlatform and safePlatform.Parent then
-        safePlatform:Destroy()
-    end
-    safePlatform = nil
-end
-
-local function createSafePlatform()
-    destroySafePlatform()
-    local part = Instance.new("Part")
-    part.Name = "SafeFarmPlatform"
-    part.Size = Vector3.new(12, 1, 12)
-    part.Position = SAFE_POS + Vector3.new(0, -3, 0)
-    part.Anchored = true
-    part.CanCollide = true
-    part.Transparency = 0.3
-    part.Material = Enum.Material.Neon
-    part.Color = Color3.fromRGB(40, 180, 90)
-    part.TopSurface = Enum.SurfaceType.Smooth
-    part.BottomSurface = Enum.SurfaceType.Smooth
-    part.Parent = workspace
-
-    local light = Instance.new("PointLight")
-    light.Brightness = 1.2
-    light.Range = 14
-    light.Color = Color3.fromRGB(80, 255, 120)
-    light.Parent = part
-
-    safePlatform = part
-end
-
-local function teleportToSafeFarm()
-    if not root or not root.Parent then
-        warn("Нет персонажа для телепорта")
-        return
-    end
-    createSafePlatform()
-    root.AssemblyLinearVelocity = Vector3.zero
-    root.AssemblyAngularVelocity = Vector3.zero
-    root.CFrame = CFrame.new(SAFE_POS + Vector3.new(0, 3, 0))
-    print("Safe Farm: телепорт + платформа")
-end
-
 local THROW_HEIGHT = 3.2
 
 local function safePos()
@@ -808,27 +761,61 @@ local updateResetToggle = createToggle(MainPage, "Автосдача", 168, auto
     saveConfig()
 end)
 
--- Кнопка Safe Farm (телепорт + платформа)
-local SafeFarmBtn = Instance.new("TextButton")
-SafeFarmBtn.Size = UDim2.new(1, -20, 0, 36)
-SafeFarmBtn.Position = UDim2.new(0, 10, 0, 220)
-SafeFarmBtn.BackgroundColor3 = Color3.fromRGB(40, 140, 90)
-SafeFarmBtn.Text = "🛡️ Safe Farm (TP + Platform)"
-SafeFarmBtn.TextColor3 = Color3.new(1, 1, 1)
-SafeFarmBtn.Font = Enum.Font.GothamBold
-SafeFarmBtn.TextSize = 14
-SafeFarmBtn.Parent = MainPage
-Instance.new("UICorner", SafeFarmBtn).CornerRadius = UDim.new(0, 8)
+-- Очистка преград в DustSite (оставляем только DesertFloor и DesertRiser)
+local KEEP_NAMES = {
+    ["DesertFloor"] = true,
+    ["DesertRiser"] = true,
+}
 
-SafeFarmBtn.MouseButton1Click:Connect(function()
-    teleportToSafeFarm()
+local function clearDustSiteObstacles()
+    local map = workspace:FindFirstChild("0Map")
+    if not map then
+        warn("0Map не найден")
+        return
+    end
+    local dust22 = map:FindFirstChild("dust22")
+    if not dust22 then
+        warn("dust22 не найден")
+        return
+    end
+    local site = dust22:FindFirstChild("DustSite")
+    if not site then
+        warn("DustSite не найден")
+        return
+    end
+
+    local removed = 0
+    for _, child in ipairs(site:GetChildren()) do
+        if not KEEP_NAMES[child.Name] then
+            pcall(function()
+                child:Destroy()
+            end)
+            removed += 1
+        end
+    end
+    print("DustSite: удалено объектов —", removed)
+end
+
+local ClearBtn = Instance.new("TextButton")
+ClearBtn.Size = UDim2.new(1, -20, 0, 36)
+ClearBtn.Position = UDim2.new(0, 10, 0, 220)
+ClearBtn.BackgroundColor3 = Color3.fromRGB(180, 70, 60)
+ClearBtn.Text = "🗑️ Убрать преграды (DustSite)"
+ClearBtn.TextColor3 = Color3.new(1, 1, 1)
+ClearBtn.Font = Enum.Font.GothamBold
+ClearBtn.TextSize = 13
+ClearBtn.Parent = MainPage
+Instance.new("UICorner", ClearBtn).CornerRadius = UDim.new(0, 8)
+
+ClearBtn.MouseButton1Click:Connect(function()
+    clearDustSiteObstacles()
 end)
 
 local ZoneHint = Instance.new("TextLabel")
-ZoneHint.Size = UDim2.new(1, -20, 0, 36)
-ZoneHint.Position = UDim2.new(0, 10, 0, 266)
+ZoneHint.Size = UDim2.new(1, -20, 0, 28)
+ZoneHint.Position = UDim2.new(0, 10, 0, 264)
 ZoneHint.BackgroundTransparency = 1
-ZoneHint.Text = "1 и 2 зона пока без предметов.\nАвтосдача работает отдельно от фарма."
+ZoneHint.Text = "1 и 2 зона пока без предметов. Автосдача отдельно."
 ZoneHint.TextColor3 = Color3.fromRGB(140, 140, 160)
 ZoneHint.Font = Enum.Font.Gotham
 ZoneHint.TextSize = 12
