@@ -768,6 +768,7 @@ local function shouldKeep(name)
         or string.find(name, "desertriser", 1, true)
         or string.find(name, "desert_floor", 1, true)
         or string.find(name, "desert floor", 1, true)
+        or string.find(name, "desertstrip", 1, true)
 end
 
 local function clearDustSiteObstacles()
