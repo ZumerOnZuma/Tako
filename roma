@@ -761,11 +761,14 @@ local updateResetToggle = createToggle(MainPage, "Автосдача", 168, auto
     saveConfig()
 end)
 
--- Очистка преград в DustSite (оставляем только DesertFloor и DesertRiser)
-local KEEP_NAMES = {
-    ["DesertFloor"] = true,
-    ["DesertRiser"] = true,
-}
+-- Очистка преград в DustSite (оставляем DesertFloor / DesertRiser и всё похожее)
+local function shouldKeep(name)
+    name = string.lower(name or "")
+    return string.find(name, "desertfloor", 1, true)
+        or string.find(name, "desertriser", 1, true)
+        or string.find(name, "desert_floor", 1, true)
+        or string.find(name, "desert floor", 1, true)
+end
 
 local function clearDustSiteObstacles()
     local map = workspace:FindFirstChild("0Map")
@@ -785,8 +788,9 @@ local function clearDustSiteObstacles()
     end
 
     local removed = 0
+    -- удаляем прямых детей
     for _, child in ipairs(site:GetChildren()) do
-        if not KEEP_NAMES[child.Name] then
+        if not shouldKeep(child.Name) then
             pcall(function()
                 child:Destroy()
             end)
@@ -796,16 +800,25 @@ local function clearDustSiteObstacles()
     print("DustSite: удалено объектов —", removed)
 end
 
+-- Кнопка в стиле GUI (как тогглы)
+local ClearFrame = Instance.new("Frame")
+ClearFrame.Size = UDim2.new(1, -20, 0, 42)
+ClearFrame.Position = UDim2.new(0, 10, 0, 220)
+ClearFrame.BackgroundColor3 = Color3.fromRGB(32, 32, 44)
+ClearFrame.Parent = MainPage
+Instance.new("UICorner", ClearFrame).CornerRadius = UDim.new(0, 8)
+
 local ClearBtn = Instance.new("TextButton")
-ClearBtn.Size = UDim2.new(1, -20, 0, 36)
-ClearBtn.Position = UDim2.new(0, 10, 0, 220)
-ClearBtn.BackgroundColor3 = Color3.fromRGB(180, 70, 60)
-ClearBtn.Text = "🗑️ Убрать преграды (DustSite)"
-ClearBtn.TextColor3 = Color3.new(1, 1, 1)
-ClearBtn.Font = Enum.Font.GothamBold
-ClearBtn.TextSize = 13
-ClearBtn.Parent = MainPage
-Instance.new("UICorner", ClearBtn).CornerRadius = UDim.new(0, 8)
+ClearBtn.Size = UDim2.new(1, -16, 1, -10)
+ClearBtn.Position = UDim2.fromOffset(8, 5)
+ClearBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
+ClearBtn.Text = "Убрать преграды (CLIENT)     👆"
+ClearBtn.TextColor3 = Color3.fromRGB(220, 220, 235)
+ClearBtn.Font = Enum.Font.Gotham
+ClearBtn.TextSize = 14
+ClearBtn.TextXAlignment = Enum.TextXAlignment.Left
+ClearBtn.Parent = ClearFrame
+Instance.new("UICorner", ClearBtn).CornerRadius = UDim.new(0, 6)
 
 ClearBtn.MouseButton1Click:Connect(function()
     clearDustSiteObstacles()
