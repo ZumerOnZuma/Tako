@@ -29,6 +29,31 @@ local Zones = {
         hole = Vector3.new(89, -9, 78),
         items = {"Aquarium", "Barrier", "ROADROLLEEEEERR", "Pigeon", "carp"},
     },
+    [5] = {
+        name = "5 зона",
+        hole = Vector3.new(238, -13.6, -1025),
+        holes = {
+            Vector3.new(238, -13.59999942779541, -1025),
+            Vector3.new(78, -13.59999942779541, -255),
+            Vector3.new(-82, -13.59999942779541, -495),
+            Vector3.new(238, -13.59999942779541, -760),
+            Vector3.new(-82, -13.59999942779541, -1025),
+            Vector3.new(-82, -13.59999942779541, -760),
+            Vector3.new(238, -13.59999942779541, -495),
+        },
+            items = {
+        "Glitchy Butter Block",
+        "Microwave",
+        "Tape",
+        "chilythrily",
+        "Vending Machine",
+        "CRTTV",
+        "Shopping Cart",
+        "Water Cooler",
+        "Fridge",
+        "Magnet Block",
+    },
+    },
 }
 
 local currentZone = 3
@@ -163,6 +188,23 @@ local function applyZone(id)
         holePos = Zones[id].hole
     end
     saveConfig()
+end
+
+-- Ближайшая дыра (для 5 зоны)
+local function getClosestHole(fromPos)
+    local zone = Zones[currentZone]
+    if not zone or not zone.holes then
+        return holePos
+    end
+    local best, bestDist = nil, math.huge
+    for _, h in ipairs(zone.holes) do
+        local d = (h - fromPos).Magnitude
+        if d < bestDist then
+            bestDist = d
+            best = h
+        end
+    end
+    return best or holePos
 end
 
 -- ====================== ПЕРСОНАЖ ======================
@@ -369,13 +411,20 @@ local function pickupItem(item)
 end
 
 local function getBestThrowPosition(fromPos)
-    local direction = (fromPos - holePos) * Vector3.new(1, 0, 1)
+    -- на 5 зоне берём ближайшую дыру
+    local targetHole = holePos
+    if currentZone == 5 then
+        targetHole = getClosestHole(fromPos)
+        holePos = targetHole -- чтобы камера целилась правильно
+    end
+
+    local direction = (fromPos - targetHole) * Vector3.new(1, 0, 1)
     if direction.Magnitude < 1 then
         direction = Vector3.new(0, 0, -1)
     else
         direction = direction.Unit
     end
-    return holePos + direction * Settings.throwRadius + Vector3.new(0, THROW_HEIGHT, 0)
+    return targetHole + direction * Settings.throwRadius + Vector3.new(0, THROW_HEIGHT, 0)
 end
 
 local function aimCameraAtHole()
@@ -424,7 +473,15 @@ task.spawn(function()
                         local originalMaxStep = Settings.maxStep
                         local isRoadroller = string.lower((item.Name or ""):gsub("%s+", "")) == "roadrolleeeeerr"
 
+                        -- 5 зона: к предмету летим БЫСТРО
+                        if currentZone == 5 then
+                            Settings.maxStep = 80
+                        end
+
                         local success = safeTeleport(itemPos + Vector3.new(0, 2.8, 0), item)
+
+                        -- возвращаем обычную скорость после подхода
+                        Settings.maxStep = originalMaxStep
 
                         if success and isItemStillValid(item) then
                             task.wait(0.13)
@@ -436,6 +493,7 @@ task.spawn(function()
 
                                 task.wait(Settings.pickupWait)
                                 local throwPos = getBestThrowPosition(itemPos)
+                                -- к дыре летим с скоростью из меню (уже originalMaxStep)
                                 if safeTeleport(throwPos, nil) then
                                     task.wait(0.09)
                                     throwItem()
@@ -445,7 +503,7 @@ task.spawn(function()
                                     forceSafe()
                                 end
 
-                                -- после броска (или если бросок не удался) возвращаем обычный шаг
+                                -- после броска возвращаем обычный шаг
                                 Settings.maxStep = originalMaxStep
                             end
                         else
@@ -666,7 +724,7 @@ local PickStroke = Instance.new("UIStroke", ZonePick)
 PickStroke.Color = Color3.fromRGB(90, 90, 110)
 
 local ZoneList = Instance.new("Frame")
-ZoneList.Size = UDim2.new(0, 118, 0, 136)
+ZoneList.Size = UDim2.new(0, 118, 0, 168)
 ZoneList.Position = UDim2.new(0, 232, 0, 98)
 ZoneList.BackgroundColor3 = Color3.fromRGB(24, 24, 32)
 ZoneList.Visible = false
@@ -680,7 +738,7 @@ local function drawZone()
     ZonePick.Text = Zones[currentZone].name .. "  v"
 end
 
-for i = 1, 4 do
+for i = 1, 5 do
     local btn = Instance.new("TextButton")
     btn.Size = UDim2.new(1, -8, 0, 28)
     btn.Position = UDim2.new(0, 4, 0, 6 + (i - 1) * 32)
@@ -768,7 +826,6 @@ local function shouldKeep(name)
         or string.find(name, "desertriser", 1, true)
         or string.find(name, "desert_floor", 1, true)
         or string.find(name, "desert floor", 1, true)
-        or string.find(name, "desertstrip", 1, true)
 end
 
 local function clearDustSiteObstacles()
@@ -801,7 +858,7 @@ local function clearDustSiteObstacles()
     print("DustSite: удалено объектов —", removed)
 end
 
-     -- Кнопка в стиле GUI (как тогглы)
+-- Кнопка в стиле GUI (как тогглы)
 local ClearFrame = Instance.new("Frame")
 ClearFrame.Size = UDim2.new(1, -20, 0, 42)
 ClearFrame.Position = UDim2.new(0, 10, 0, 220)
@@ -839,7 +896,7 @@ local ZoneHint = Instance.new("TextLabel")
 ZoneHint.Size = UDim2.new(1, -20, 0, 28)
 ZoneHint.Position = UDim2.new(0, 10, 0, 264)
 ZoneHint.BackgroundTransparency = 1
-ZoneHint.Text = "By: Sin_Tako; Sponsor: Тимофей"
+ZoneHint.Text = "1 и 2 зона пока без предметов. Автосдача отдельно."
 ZoneHint.TextColor3 = Color3.fromRGB(140, 140, 160)
 ZoneHint.Font = Enum.Font.Gotham
 ZoneHint.TextSize = 12
