@@ -472,7 +472,7 @@ task.spawn(function()
 
                         -- 5 зона: к предмету летим БЫСТРО
                         if currentZone == 5 then
-                            Settings.maxStep = 80
+                            Settings.maxStep = 12
                         end
 
                         local success = safeTeleport(itemPos + Vector3.new(0, 2.8, 0), item)
