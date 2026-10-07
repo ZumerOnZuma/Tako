@@ -53,7 +53,9 @@ local Zones = {
                 "Fridge",
                 "Magnet Block",
                 "Hot Dog Stand",
+                "Couch",
                 "Traffic Cone",
+                "Telephone Booth",
                 "Office Chair",
             },
     },
@@ -377,10 +379,34 @@ local function getClosestItem()
     return closest
 end
 
+-- Зона реки (урон). Внутри прямоугольника держим Y >= SAFE_RIVER_Y
+local RIVER = {
+    minX = -10,
+    maxX = 165,
+    minZ = -1198,
+    maxZ = -323,
+}
+local SAFE_RIVER_Y = -7 -- высота, на которой хитбокс не бьёт
+
+local function isOverRiver(pos)
+    return pos.X >= RIVER.minX and pos.X <= RIVER.maxX
+        and pos.Z >= RIVER.minZ and pos.Z <= RIVER.maxZ
+end
+
+local function liftOverRiver(pos)
+    if isOverRiver(pos) and pos.Y < SAFE_RIVER_Y then
+        return Vector3.new(pos.X, SAFE_RIVER_Y, pos.Z)
+    end
+    return pos
+end
+
 local function safeTeleport(targetPos, targetItem)
     if not root or not root.Parent then return false end
     if not isValidPosition(targetPos) then forceSafe() return false end
     if targetItem and not isItemStillValid(targetItem) then forceSafe() return false end
+
+    -- цель тоже поднимаем, если она над рекой
+    targetPos = liftOverRiver(targetPos)
 
     local current = root.Position
     if not isValidPosition(current) then forceSafe() return false end
@@ -407,6 +433,7 @@ local function safeTeleport(targetPos, targetItem)
         if targetItem and not isItemStillValid(targetItem) then forceSafe() return false end
 
         local nextPos = current:Lerp(targetPos, i / segments)
+        nextPos = liftOverRiver(nextPos) -- над рекой не опускаемся ниже -7
         if not isValidPosition(nextPos) then forceSafe() return false end
 
         local segDist = (nextPos - root.Position).Magnitude
