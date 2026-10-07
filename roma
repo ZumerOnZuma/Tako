@@ -41,15 +41,23 @@ local Zones = {
             Vector3.new(-82, -13.59999942779541, -760),
             Vector3.new(238, -13.59999942779541, -495),
         },
-        items = {
-            "Glitchy Butter Block",
-            "Microwave",
-            "Tape",
-            "chilythrily",
-            "Vending Machine",
-            "CRTTV",
-            "Shopping Cart",
-        },
+            items = {
+                "Glitchy Butter Block",
+                "Microwave",
+                "Tape",
+                "chilythrily",
+                "Vending Machine",
+                "CRTTV",
+                "Shopping Cart",
+                "Water Cooler",
+                "Fridge",
+                "Magnet Block",
+                "Hot Dog Stand",
+                "Couch",
+                "Traffic Cone",
+                "Telephone Booth",
+                "Office Chair",
+            },
     },
 }
 
@@ -242,11 +250,17 @@ local function isValidPosition(pos)
     return true
 end
 
+local TweenService = game:GetService("TweenService")
+
 local function forceSafe()
     if root and root.Parent then
         root.AssemblyLinearVelocity = Vector3.zero
         root.AssemblyAngularVelocity = Vector3.zero
-        root.CFrame = CFrame.new(safePos())
+        -- аварийный возврат — один мягкий твин
+        local goal = {CFrame = CFrame.new(safePos())}
+        local tw = TweenService:Create(root, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), goal)
+        tw:Play()
+        tw.Completed:Wait()
     end
 end
 
@@ -379,20 +393,61 @@ local function safeTeleport(targetPos, targetItem)
     local totalDist = (targetPos - current).Magnitude
     if totalDist > 700 then forceSafe() return false end
 
-    if totalDist <= Settings.maxStep then
-        root.CFrame = CFrame.new(targetPos)
-        return true
+    -- скорость: maxStep ~ студов за шаг, переводим в studs/sec
+    -- stepDelay влияет на плавность (меньше delay = чуть быстрее ощущение контроля)
+    local speed = math.clamp(Settings.maxStep / math.max(Settings.stepDelay, 0.02), 25, 140)
+    if totalDist < 4 then
+        speed = math.min(speed, 50)
     end
 
-    local steps = math.ceil(totalDist / Settings.maxStep)
-    for i = 1, steps do
+    -- сегменты, чтобы проверять предмет и running по пути
+    local segmentLen = math.clamp(Settings.maxStep * 3, 12, 45)
+    local segments = math.max(1, math.ceil(totalDist / segmentLen))
+
+    for i = 1, segments do
         if not running or not root or not root.Parent then forceSafe() return false end
         if targetItem and not isItemStillValid(targetItem) then forceSafe() return false end
-        local nextPos = current:Lerp(targetPos, i / steps)
+
+        local nextPos = current:Lerp(targetPos, i / segments)
         if not isValidPosition(nextPos) then forceSafe() return false end
-        root.CFrame = CFrame.new(nextPos)
+
+        local segDist = (nextPos - root.Position).Magnitude
+        local t = math.clamp(segDist / speed, 0.04, 1.2)
+
+        local tw = TweenService:Create(
+            root,
+            TweenInfo.new(t, Enum.EasingStyle.Linear),
+            {CFrame = CFrame.new(nextPos)}
+        )
+        tw:Play()
+
+        local done = false
+        local conn
+        conn = tw.Completed:Connect(function()
+            done = true
+            if conn then conn:Disconnect() end
+        end)
+
+        while not done do
+            if not running or not root or not root.Parent then
+                tw:Cancel()
+                forceSafe()
+                return false
+            end
+            if targetItem and not isItemStillValid(targetItem) then
+                tw:Cancel()
+                forceSafe()
+                return false
+            end
+            root.AssemblyLinearVelocity = Vector3.zero
+            root.AssemblyAngularVelocity = Vector3.zero
+            task.wait(0.03)
+        end
+    end
+
+    if root and root.Parent then
         root.AssemblyLinearVelocity = Vector3.zero
-        task.wait(Settings.stepDelay)
+        root.AssemblyAngularVelocity = Vector3.zero
     end
     return true
 end
@@ -470,9 +525,9 @@ task.spawn(function()
                         local originalMaxStep = Settings.maxStep
                         local isRoadroller = string.lower((item.Name or ""):gsub("%s+", "")) == "roadrolleeeeerr"
 
-                        -- 5 зона: к предмету летим БЫСТРО
+                        -- 5 зона: к предмету чуть быстрее (не 80 — кикает Unfair movement)
                         if currentZone == 5 then
-                            Settings.maxStep = 3
+                            Settings.maxStep = math.max(originalMaxStep * 2.2, 14)
                         end
 
                         local success = safeTeleport(itemPos + Vector3.new(0, 2.8, 0), item)
@@ -556,8 +611,8 @@ MiniStroke.Color = Color3.fromRGB(80, 80, 120)
 MiniStroke.Thickness = 1.5
 
 local Main = Instance.new("Frame")
-Main.Size = UDim2.new(0, 520, 0, 390)
-Main.Position = UDim2.new(0.5, -260, 0.5, -195)
+Main.Size = UDim2.new(0, 520, 0, 430)
+Main.Position = UDim2.new(0.5, -260, 0.5, -215)
 Main.BackgroundColor3 = Color3.fromRGB(18, 18, 24)
 Main.BorderSizePixel = 0
 Main.Parent = ScreenGui
@@ -889,9 +944,57 @@ ClearBtn.MouseButton1Click:Connect(function()
     clearDustSiteObstacles()
 end)
 
+local GachaFrame = Instance.new("Frame")
+GachaFrame.Size = UDim2.new(1, -20, 0, 42)
+GachaFrame.Position = UDim2.new(0, 10, 0, 268)
+GachaFrame.BackgroundColor3 = Color3.fromRGB(32, 32, 44)
+GachaFrame.Parent = MainPage
+Instance.new("UICorner", GachaFrame).CornerRadius = UDim.new(0, 8)
+
+local GachaBtn = Instance.new("TextButton")
+GachaBtn.Size = UDim2.new(1, 0, 1, 0)
+GachaBtn.Position = UDim2.new(0, 0, 0, 0)
+GachaBtn.BackgroundTransparency = 1
+GachaBtn.AutoButtonColor = false
+GachaBtn.Text = "    Убрать GachaReveal (CLIENT)                                                        👆"
+GachaBtn.TextColor3 = Color3.fromRGB(220, 220, 235)
+GachaBtn.Font = Enum.Font.Gotham
+GachaBtn.TextSize = 14
+GachaBtn.TextXAlignment = Enum.TextXAlignment.Left
+GachaBtn.Parent = GachaFrame
+
+GachaBtn.MouseEnter:Connect(function()
+    GachaFrame.BackgroundColor3 = HOVER_BG
+end)
+GachaBtn.MouseLeave:Connect(function()
+    GachaFrame.BackgroundColor3 = NORMAL_BG
+end)
+
+GachaBtn.MouseButton1Click:Connect(function()
+    removeGachaReveal()
+end)
+
+local function removeGachaReveal()
+    local rs = game:GetService("ReplicatedStorage")
+    local remotes = rs:FindFirstChild("Remotes")
+    if not remotes then
+        warn("Remotes не найден")
+        return
+    end
+    local gacha = remotes:FindFirstChild("GachaReveal")
+    if gacha then
+        pcall(function()
+            gacha:Destroy()
+        end)
+        print("GachaReveal удалён")
+    else
+        warn("GachaReveal не найден")
+    end
+end
+
 local ZoneHint = Instance.new("TextLabel")
 ZoneHint.Size = UDim2.new(1, -20, 0, 28)
-ZoneHint.Position = UDim2.new(0, 10, 0, 264)
+ZoneHint.Position = UDim2.new(0, 10, 0, 316)
 ZoneHint.BackgroundTransparency = 1
 ZoneHint.Text = "1 и 2 зона пока без предметов. Автосдача отдельно."
 ZoneHint.TextColor3 = Color3.fromRGB(140, 140, 160)
