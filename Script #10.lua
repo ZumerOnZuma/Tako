@@ -3,11 +3,67 @@ local Players = game:GetService("Players")
 local UIS = game:GetService("UserInputService")
 
 local player = Players.LocalPlayer
-local mouse = player:GetMouse()
+local localPlayer = player
 
--- ====================== НАСТРОЙКИ ======================
-local holePos = Vector3.new(89, -4, 325)
-local itemNames = {"Anvil", "BusStop", "IronSafe"}
+-- ====================== ЗОНЫ ======================
+-- 1 и 2 зону заполнишь, когда будут координаты дырки и имена предметов.
+-- 4 зону потом добавим сюда же одной строкой.
+local Zones = {
+    [1] = {
+        name = "1 зона",
+        hole = nil,
+        items = {"Chocolate bar", "Trash Box", "Calendars", "Battery", "Crate"},
+    },
+    [2] = {
+        name = "2 зона",
+        hole = Vector3.new(89, 1, 543),
+        items = {"Beach chair", "Bench", "iron_ladder"},
+    },
+    [3] = {
+        name = "3 зона",
+        hole = Vector3.new(89, -4, 325),
+        items = {"Anvil", "BusStop", "IronSafe"},
+    },
+    [4] = {
+        name = "4 зона",
+        hole = Vector3.new(89, -9, 78),
+        items = {"Aquarium", "Barrier", "ROADROLLEEEEERR", "Pigeon", "carp"},
+    },
+    [5] = {
+        name = "5 зона",
+        hole = Vector3.new(238, -13.6, -1025),
+        holes = {
+            Vector3.new(238, -13.59999942779541, -1025),
+            Vector3.new(78, -13.59999942779541, -255),
+            Vector3.new(-82, -13.59999942779541, -495),
+            Vector3.new(238, -13.59999942779541, -760),
+            Vector3.new(-82, -13.59999942779541, -1025),
+            Vector3.new(-82, -13.59999942779541, -760),
+            Vector3.new(238, -13.59999942779541, -495),
+        },
+            items = {
+                "Glitchy Butter Block",
+                "Microwave",
+                "Tape",
+                "chilythrily",
+                "Vending Machine",
+                "CRTTV",
+                "Shopping Cart",
+                "Water Cooler",
+                "Fridge",
+                "Magnet Block",
+                "Hot Dog Stand",
+                "Couch",
+                "Traffic Cone",
+                "Telephone Booth",
+                "Office Chair",
+            },
+    },
+}
+
+local currentZone = 3
+local holePos = Zones[currentZone].hole
+local itemNames = Zones[currentZone].items
 
 local Settings = {
     maxStep = 4.5,
@@ -15,14 +71,146 @@ local Settings = {
     pickupWait = 0.28,
     depositClicks = 3,
     resetEvery = 4,
-    throwRadius = 13
+    throwRadius = 13,
 }
 
 local deposited = 0
 local running = false
-local autoReset = true          -- автосброс шкалы
+local autoReset = false
 local currentTab = "Main"
 local minimized = false
+
+local CONFIG_FILE = "farmhub_config.json"
+local HttpService = game:GetService("HttpService")
+
+local function saveConfig()
+    local data = {
+        zone = currentZone,
+        running = running,
+        autoReset = autoReset,
+        maxStep = Settings.maxStep,
+        stepDelay = Settings.stepDelay,
+        pickupWait = Settings.pickupWait,
+        throwRadius = Settings.throwRadius,
+    }
+    local payload = HttpService:JSONEncode(data)
+    if type(writefile) ~= "function" then
+        warn("config: writefile нет в executor")
+        return false
+    end
+    local ok, err = pcall(writefile, CONFIG_FILE, payload)
+    if not ok then
+        warn("config save failed: " .. tostring(err))
+        return false
+    end
+    print("config saved")
+    return true
+end
+
+local function loadConfig()
+    local ok, raw = pcall(function()
+        if isfile and isfile(CONFIG_FILE) then
+            return readfile(CONFIG_FILE)
+        end
+    end)
+    if not ok or type(raw) ~= "string" or raw == "" then
+        return
+    end
+    local decodedOk, data = pcall(function()
+        return HttpService:JSONDecode(raw)
+    end)
+    if not decodedOk or type(data) ~= "table" then
+        return
+    end
+    if data.zone and Zones[data.zone] then
+        currentZone = data.zone
+    end
+    if data.maxStep then Settings.maxStep = data.maxStep end
+    if data.stepDelay then Settings.stepDelay = data.stepDelay end
+    if data.pickupWait then Settings.pickupWait = data.pickupWait end
+    if data.throwRadius then Settings.throwRadius = data.throwRadius end
+    running = data.running == true
+    autoReset = data.autoReset == true
+    holePos = Zones[currentZone].hole
+    itemNames = Zones[currentZone].items
+    return true
+end
+
+loadConfig()
+print("config check done")
+
+local function readText(obj)
+    if not obj then return "" end
+    if obj:IsA("TextLabel") or obj:IsA("TextButton") then
+        return obj.Text or ""
+    end
+    local inner = obj:FindFirstChildWhichIsA("TextLabel", true)
+    return (inner and inner.Text) or ""
+end
+
+local function findZone1Hole()
+    local map = workspace:FindFirstChild("0Map")
+    if not map then return nil end
+    local names = {
+        string.lower(player.Name),
+        string.lower(player.DisplayName),
+    }
+    local function isMine(text)
+        text = string.lower(text or "")
+        for _, n in ipairs(names) do
+            if n ~= "" and string.find(text, n .. "'s base", 1, true) then
+                return true
+            end
+        end
+        return false
+    end
+    for _, folder in ipairs(map:GetChildren()) do
+        if string.find(string.lower(folder.Name), "bases") then
+            for _, base in ipairs(folder:GetChildren()) do
+                local owner = base:FindFirstChild("OwnerText", true)
+                if isMine(readText(owner)) then
+                    local hole = base:FindFirstChild("hole", true) or base:FindFirstChild("HoleHitbox", true)
+                    if hole and hole:IsA("BasePart") then
+                        return hole.Position
+                    end
+                    if hole then
+                        local part = hole:FindFirstChildWhichIsA("BasePart", true)
+                        if part then return part.Position end
+                    end
+                end
+            end
+        end
+    end
+    return nil
+end
+
+local function applyZone(id)
+    currentZone = id
+    itemNames = Zones[id].items
+    if id == 1 then
+        holePos = findZone1Hole()
+    else
+        holePos = Zones[id].hole
+    end
+    saveConfig()
+end
+
+-- Ближайшая дыра (для 5 зоны)
+local function getClosestHole(fromPos)
+    local zone = Zones[currentZone]
+    if not zone or not zone.holes then
+        return holePos
+    end
+    local best, bestDist = nil, math.huge
+    for _, h in ipairs(zone.holes) do
+        local d = (h - fromPos).Magnitude
+        if d < bestDist then
+            bestDist = d
+            best = h
+        end
+    end
+    return best or holePos
+end
 
 -- ====================== ПЕРСОНАЖ ======================
 local character, root, humanoid
@@ -31,12 +219,7 @@ local function setupCharacter(char)
     character = char
     root = character:WaitForChild("HumanoidRootPart", 8)
     humanoid = character:WaitForChild("Humanoid", 8)
-    
-    if humanoid then
-        humanoid.Died:Connect(function()
-            running = false
-        end)
-    end
+    -- больше не останавливаем фарм при смерти — продолжит после респавна
 end
 
 if player.Character then
@@ -48,12 +231,16 @@ player.CharacterAdded:Connect(function(char)
     setupCharacter(char)
 end)
 
--- ====================== НАСТРОЙКИ БРОСКА (КРУГ) ======================
 local THROW_HEIGHT = 3.2
 
-local SAFE_POS = holePos + Vector3.new(0, 6, 0)
+local function safePos()
+    if not holePos then
+        return (root and root.Position) or Vector3.new(0, 8, 0)
+    end
+    return holePos + Vector3.new(0, 6, 0)
+end
 
--- ====================== БЕЗОПАСНЫЕ ФУНКЦИИ ======================
+-- ====================== ПРОВЕРКИ ======================
 local function isValidPosition(pos)
     if typeof(pos) ~= "Vector3" then return false end
     if pos.X ~= pos.X or pos.Y ~= pos.Y or pos.Z ~= pos.Z then return false end
@@ -63,36 +250,19 @@ local function isValidPosition(pos)
     return true
 end
 
+local TweenService = game:GetService("TweenService")
+
 local function forceSafe()
     if root and root.Parent then
         root.AssemblyLinearVelocity = Vector3.zero
         root.AssemblyAngularVelocity = Vector3.zero
-        root.CFrame = CFrame.new(SAFE_POS)
+        -- аварийный возврат — один мягкий твин
+        local goal = {CFrame = CFrame.new(safePos())}
+        local tw = TweenService:Create(root, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), goal)
+        tw:Play()
+        tw.Completed:Wait()
     end
 end
-
-local function isItemStillValid(item)
-    if not item or not item.Parent then return false end
-    if not item:IsDescendantOf(workspace) then return false end
-
-    local prompt = item:FindFirstChild("PickupPrompt", true)
-    local pos
-    if prompt and prompt.Parent and prompt.Parent:IsA("BasePart") then
-        pos = prompt.Parent.Position
-    else
-        local part = item:FindFirstChildWhichIsA("BasePart", true)
-        pos = part and part.Position
-    end
-
-    return pos ~= nil and isValidPosition(pos)
-end
-
-local function nameOk(n)
-    return n == "Anvil" or n == "BusStop" or n == "IronSafe"
-end
-
-local Players = game:GetService("Players")
-local localPlayer = Players.LocalPlayer
 
 local function isOtherCharacter(model)
     if not model or not model:IsA("Model") then return false end
@@ -102,7 +272,6 @@ end
 
 local function isHeldBySomeoneElse(item)
     if not item or not item.Parent then return true end
-
     local current = item
     while current and current ~= workspace do
         if isOtherCharacter(current) then
@@ -110,12 +279,10 @@ local function isHeldBySomeoneElse(item)
         end
         current = current.Parent
     end
-
     local prompt = item:FindFirstChild("PickupPrompt", true)
     if prompt and prompt.Enabled == false then
         return true
     end
-
     for _, obj in ipairs(item:GetDescendants()) do
         if obj:IsA("WeldConstraint") or obj:IsA("Weld") or obj:IsA("Motor6D") then
             for _, side in ipairs({obj.Part0, obj.Part1}) do
@@ -128,12 +295,15 @@ local function isHeldBySomeoneElse(item)
             end
         end
     end
-
     return false
 end
 
 local function getItemPos(item)
     if not item then return nil end
+    -- если сам предмет — Part/MeshPart (как carp)
+    if item:IsA("BasePart") then
+        return item.Position
+    end
     local prompt = item:FindFirstChild("PickupPrompt", true)
     if prompt and prompt.Parent and prompt.Parent:IsA("BasePart") then
         return prompt.Parent.Position
@@ -145,6 +315,39 @@ local function getItemPos(item)
     return nil
 end
 
+local function isItemStillValid(item)
+    if not item or not item.Parent then return false end
+    if not item:IsDescendantOf(workspace) then return false end
+    if isHeldBySomeoneElse(item) then return false end
+    local pos = getItemPos(item)
+    return pos ~= nil and isValidPosition(pos)
+end
+
+local function nameOk(n)
+    local function clean(s)
+        return string.lower((s or ""):gsub("%s+", ""))
+    end
+    local want = clean(n)
+    for _, itemName in ipairs(itemNames) do
+        if clean(itemName) == want then
+            return true
+        end
+    end
+    return false
+end
+
+local function namedItem(prompt)
+    local current = prompt
+    while current and current ~= workspace do
+        -- убрали IsA("Model") — теперь работает и для Part / MeshPart / Folder (как carp)
+        if nameOk(current.Name) then
+            return current
+        end
+        current = current.Parent
+    end
+    return nil
+end
+
 local function getClosestItem()
     if not root or not root.Parent then return nil end
     local closest, minDist = nil, math.huge
@@ -152,18 +355,23 @@ local function getClosestItem()
     if not folder then return nil end
 
     for _, prompt in ipairs(folder:GetDescendants()) do
-    if prompt:IsA("ProximityPrompt") and prompt.Name == "PickupPrompt" then
-        local model = prompt:FindFirstAncestorOfClass("Model")
-        if model and not isHeldBySomeoneElse(model)
-            and (model.Name == "Anvil" or model.Name == "BusStop" or model.Name == "IronSafe") then
-            local part = prompt.Parent
-            local pos = (part and part:IsA("BasePart")) and part.Position or nil
-            if pos and isValidPosition(pos) then
-                local dist = (pos - root.Position).Magnitude
-                if dist < minDist and dist < 600 then
-                    minDist = dist
-                    closest = model
-end
+        if prompt:IsA("ProximityPrompt") and prompt.Name == "PickupPrompt" then
+            local model = namedItem(prompt)
+            if model and not isHeldBySomeoneElse(model) then
+                local part = prompt.Parent
+                local pos
+                if part and part:IsA("BasePart") then
+                    pos = part.Position
+                else
+                    local any = model:FindFirstChildWhichIsA("BasePart", true)
+                    pos = any and any.Position
+                end
+                if pos and isValidPosition(pos) then
+                    local dist = (pos - root.Position).Magnitude
+                    if dist < minDist and dist < 600 then
+                        minDist = dist
+                        closest = model
+                    end
                 end
             end
         end
@@ -171,36 +379,101 @@ end
     return closest
 end
 
+-- Если предмет дальше 40 студов — один ТП ближе, потом обычный полёт (без цикла ТП)
+local APPROACH_DIST = 40
+local APPROACH_OFFSET = 28
+
+local function jumpNearItem(itemPos)
+    if not root or not root.Parent then return false end
+    local dist = (itemPos - root.Position).Magnitude
+    if dist <= APPROACH_DIST then
+        return true -- уже близко
+    end
+
+    -- точка ~28 студов от предмета, в сторону игрока
+    local dir = root.Position - itemPos
+    if dir.Magnitude < 1 then
+        dir = Vector3.new(0, 0, 1)
+    else
+        dir = dir.Unit
+    end
+
+    local approach = itemPos + dir * APPROACH_OFFSET + Vector3.new(0, 4, 0)
+    if not isValidPosition(approach) then return false end
+
+    root.AssemblyLinearVelocity = Vector3.zero
+    root.AssemblyAngularVelocity = Vector3.zero
+    root.CFrame = CFrame.new(approach)
+    task.wait(0.12)
+    return true
+end
+
 local function safeTeleport(targetPos, targetItem)
     if not root or not root.Parent then return false end
     if not isValidPosition(targetPos) then forceSafe() return false end
     if targetItem and not isItemStillValid(targetItem) then forceSafe() return false end
-    
+
     local current = root.Position
     if not isValidPosition(current) then forceSafe() return false end
-    
+
     root.AssemblyLinearVelocity = Vector3.zero
     root.AssemblyAngularVelocity = Vector3.zero
-    
+
     local totalDist = (targetPos - current).Magnitude
     if totalDist > 700 then forceSafe() return false end
-    
-    if totalDist <= Settings.maxStep then
-        root.CFrame = CFrame.new(targetPos)
-        return true
+
+    local speed = math.clamp(Settings.maxStep / math.max(Settings.stepDelay, 0.02), 25, 140)
+    if totalDist < 4 then
+        speed = math.min(speed, 50)
     end
-    
-    local steps = math.ceil(totalDist / Settings.maxStep)
-    for i = 1, steps do
+
+    local segmentLen = math.clamp(Settings.maxStep * 3, 12, 45)
+    local segments = math.max(1, math.ceil(totalDist / segmentLen))
+
+    for i = 1, segments do
         if not running or not root or not root.Parent then forceSafe() return false end
         if targetItem and not isItemStillValid(targetItem) then forceSafe() return false end
-        
-        local nextPos = current:Lerp(targetPos, i / steps)
+
+        local nextPos = current:Lerp(targetPos, i / segments)
         if not isValidPosition(nextPos) then forceSafe() return false end
-        
-        root.CFrame = CFrame.new(nextPos)
+
+        local segDist = (nextPos - root.Position).Magnitude
+        local t = math.clamp(segDist / speed, 0.04, 1.2)
+
+        local tw = TweenService:Create(
+            root,
+            TweenInfo.new(t, Enum.EasingStyle.Linear),
+            {CFrame = CFrame.new(nextPos)}
+        )
+        tw:Play()
+
+        local done = false
+        local conn
+        conn = tw.Completed:Connect(function()
+            done = true
+            if conn then conn:Disconnect() end
+        end)
+
+        while not done do
+            if not running or not root or not root.Parent then
+                tw:Cancel()
+                forceSafe()
+                return false
+            end
+            if targetItem and not isItemStillValid(targetItem) then
+                tw:Cancel()
+                forceSafe()
+                return false
+            end
+            root.AssemblyLinearVelocity = Vector3.zero
+            root.AssemblyAngularVelocity = Vector3.zero
+            task.wait(0.03)
+        end
+    end
+
+    if root and root.Parent then
         root.AssemblyLinearVelocity = Vector3.zero
-        task.wait(Settings.stepDelay)
+        root.AssemblyAngularVelocity = Vector3.zero
     end
     return true
 end
@@ -215,15 +488,21 @@ local function pickupItem(item)
     return false
 end
 
--- Считаем лучшую точку на зелёном круге
 local function getBestThrowPosition(fromPos)
-    local direction = (fromPos - holePos) * Vector3.new(1, 0, 1)
+    -- на 5 зоне берём ближайшую дыру
+    local targetHole = holePos
+    if currentZone == 5 then
+        targetHole = getClosestHole(fromPos)
+        holePos = targetHole -- чтобы камера целилась правильно
+    end
+
+    local direction = (fromPos - targetHole) * Vector3.new(1, 0, 1)
     if direction.Magnitude < 1 then
         direction = Vector3.new(0, 0, -1)
     else
         direction = direction.Unit
     end
-    return holePos + direction * Settings.throwRadius + Vector3.new(0, THROW_HEIGHT, 0)
+    return targetHole + direction * Settings.throwRadius + Vector3.new(0, THROW_HEIGHT, 0)
 end
 
 local function aimCameraAtHole()
@@ -236,9 +515,8 @@ end
 local function throwItem()
     aimCameraAtHole()
     task.wait(0.07)
-    
     local vim = game:GetService("VirtualInputManager")
-    for i = 1, 2 do
+    for _ = 1, 2 do
         pcall(function()
             vim:SendMouseButtonEvent(0, 0, 0, true, game, 1)
             task.wait(0.035)
@@ -248,58 +526,76 @@ local function throwItem()
     end
 end
 
-local function resetHole()
-    pcall(function()
-        game:GetService("ReplicatedStorage").Remotes.HoleGiveMe:InvokeServer()
-    end)
-end
-
--- ====================== ОСНОВНОЙ ЦИКЛ ======================
 task.spawn(function()
     while true do
         if running and root and root.Parent then
-            if not isValidPosition(root.Position) then
-                forceSafe()
-                task.wait(0.4)
+            if currentZone == 1 then
+                local mine = findZone1Hole()
+                if not mine then
+                    task.wait(0.5)
+                    continue
+                end
+                holePos = mine
             end
-
-            local item = getClosestItem()
-            if item then
-                if isHeldBySomeoneElse(item) then
-                    task.wait(0.1)
-                else
+            if #itemNames == 0 then
+                task.wait(0.4)
+            else
+                if not isValidPosition(root.Position) then
+                    forceSafe()
+                    task.wait(0.4)
+                end
+                local item = getClosestItem()
+                if item and not isHeldBySomeoneElse(item) then
                     local itemPos = getItemPos(item)
-                    local ok = itemPos ~= nil
+                    if itemPos and isValidPosition(itemPos) then
+                        local originalMaxStep = Settings.maxStep
+                        local isRoadroller = string.lower((item.Name or ""):gsub("%s+", "")) == "roadrolleeeeerr"
 
-                    if ok and isValidPosition(itemPos) then
-                        local success = safeTeleport(itemPos + Vector3.new(0, 2.8, 0), item)
+                        -- 5 зона: к предмету чуть быстрее (не 80 — кикает Unfair movement)
+                        if currentZone == 5 then
+                            Settings.maxStep = math.max(originalMaxStep * 2.2, 14)
+                        end
 
-                        if success and isItemStillValid(item) then
-                            task.wait(0.13)
-
-                            if pickupItem(item) then
-                                task.wait(Settings.pickupWait)
-
-                                local throwPos = getBestThrowPosition(itemPos)
-
-                                if safeTeleport(throwPos, nil) then
-                                    task.wait(0.09)
-                                    throwItem()
-                                    task.wait(0.28)
-                                    deposited += 1
-                                else
-                                    forceSafe()
-                                end
-                            end
-                        else
+                        -- если далеко — один раз прыгаем ближе к предмету, потом летим
+                        if not jumpNearItem(itemPos) then
+                            Settings.maxStep = originalMaxStep
                             forceSafe()
+                        else
+                            local success = safeTeleport(itemPos + Vector3.new(0, 2.8, 0), item)
+
+                            -- возвращаем обычную скорость после подхода
+                            Settings.maxStep = originalMaxStep
+
+                            if success and isItemStillValid(item) then
+                                task.wait(0.13)
+                                if pickupItem(item) then
+                                    if isRoadroller then
+                                        Settings.maxStep = 1.1
+                                    end
+
+                                    task.wait(Settings.pickupWait)
+                                    local throwPos = getBestThrowPosition(itemPos)
+                                    if safeTeleport(throwPos, nil) then
+                                        task.wait(0.09)
+                                        throwItem()
+                                        task.wait(0.28)
+                                        deposited += 1
+                                    else
+                                        forceSafe()
+                                    end
+
+                                    Settings.maxStep = originalMaxStep
+                                end
+                            else
+                                forceSafe()
+                            end
                         end
                     else
                         forceSafe()
                     end
+                else
+                    task.wait(0.35)
                 end
-            else
-                task.wait(0.35)
             end
         else
             task.wait(0.2)
@@ -308,14 +604,26 @@ task.spawn(function()
     end
 end)
 
+task.spawn(function()
+    while task.wait(3) do
+        if autoReset then
+            pcall(function()
+                game:GetService("ReplicatedStorage").Remotes.HoleGiveMe:InvokeServer()
+            end)
+        end
+    end
+end)
+
 -- ====================== GUI ======================
+local oldGui = game:GetService("CoreGui"):FindFirstChild("FarmHub")
+if oldGui then oldGui:Destroy() end
+
 local ScreenGui = Instance.new("ScreenGui")
 ScreenGui.Name = "FarmHub"
 ScreenGui.ResetOnSpawn = false
 ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 ScreenGui.Parent = game:GetService("CoreGui")
 
--- Мини-кнопка
 local Mini = Instance.new("TextButton")
 Mini.Size = UDim2.new(0, 48, 0, 48)
 Mini.Position = UDim2.new(0, 20, 0.4, 0)
@@ -326,32 +634,27 @@ Mini.Font = Enum.Font.GothamBold
 Mini.TextSize = 16
 Mini.Visible = false
 Mini.Parent = ScreenGui
-
 Instance.new("UICorner", Mini).CornerRadius = UDim.new(0, 12)
 local MiniStroke = Instance.new("UIStroke", Mini)
 MiniStroke.Color = Color3.fromRGB(80, 80, 120)
 MiniStroke.Thickness = 1.5
 
--- Главное окно
 local Main = Instance.new("Frame")
-Main.Size = UDim2.new(0, 520, 0, 360)
-Main.Position = UDim2.new(0.5, -260, 0.5, -180)
+Main.Size = UDim2.new(0, 520, 0, 430)
+Main.Position = UDim2.new(0.5, -260, 0.5, -215)
 Main.BackgroundColor3 = Color3.fromRGB(18, 18, 24)
 Main.BorderSizePixel = 0
 Main.Parent = ScreenGui
-
 Instance.new("UICorner", Main).CornerRadius = UDim.new(0, 12)
 local MainStroke = Instance.new("UIStroke", Main)
 MainStroke.Color = Color3.fromRGB(45, 45, 60)
 MainStroke.Thickness = 1.5
 
--- Заголовок
 local TitleBar = Instance.new("Frame")
 TitleBar.Size = UDim2.new(1, 0, 0, 42)
 TitleBar.BackgroundColor3 = Color3.fromRGB(22, 22, 30)
 TitleBar.BorderSizePixel = 0
 TitleBar.Parent = Main
-
 Instance.new("UICorner", TitleBar).CornerRadius = UDim.new(0, 12)
 local TitleFix = Instance.new("Frame")
 TitleFix.Size = UDim2.new(1, 0, 0, 20)
@@ -375,7 +678,7 @@ local MinBtn = Instance.new("TextButton")
 MinBtn.Size = UDim2.new(0, 32, 0, 32)
 MinBtn.Position = UDim2.new(1, -78, 0, 5)
 MinBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
-MinBtn.Text = "–"
+MinBtn.Text = "-"
 MinBtn.TextColor3 = Color3.fromRGB(220, 220, 230)
 MinBtn.Font = Enum.Font.GothamBold
 MinBtn.TextSize = 18
@@ -386,7 +689,7 @@ local CloseBtn = Instance.new("TextButton")
 CloseBtn.Size = UDim2.new(0, 32, 0, 32)
 CloseBtn.Position = UDim2.new(1, -38, 0, 5)
 CloseBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
-CloseBtn.Text = "×"
+CloseBtn.Text = "x"
 CloseBtn.TextColor3 = Color3.fromRGB(220, 220, 230)
 CloseBtn.Font = Enum.Font.GothamBold
 CloseBtn.TextSize = 18
@@ -396,6 +699,7 @@ Instance.new("UICorner", CloseBtn).CornerRadius = UDim.new(0, 8)
 CloseBtn.MouseButton1Click:Connect(function()
     ScreenGui:Destroy()
     running = false
+    autoReset = false
 end)
 
 local function setMinimized(state)
@@ -407,7 +711,6 @@ end
 MinBtn.MouseButton1Click:Connect(function() setMinimized(true) end)
 Mini.MouseButton1Click:Connect(function() setMinimized(false) end)
 
--- Боковое меню
 local Side = Instance.new("Frame")
 Side.Size = UDim2.new(0, 140, 1, -42)
 Side.Position = UDim2.new(0, 0, 0, 42)
@@ -431,9 +734,8 @@ local function createTabButton(name, order)
 end
 
 local TabMain = createTabButton("Main", 1)
-local TabPlayer = createTabButton("Player", 2)
-local TabSettings = createTabButton("Settings", 3)
-local TabInfo = createTabButton("Info", 4)
+local TabSettings = createTabButton("Settings", 2)
+local TabInfo = createTabButton("Info", 3)
 
 local Content = Instance.new("Frame")
 Content.Size = UDim2.new(1, -150, 1, -52)
@@ -441,15 +743,14 @@ Content.Position = UDim2.new(0, 145, 0, 48)
 Content.BackgroundTransparency = 1
 Content.Parent = Main
 
--- ========== MAIN PAGE ==========
 local MainPage = Instance.new("Frame")
 MainPage.Size = UDim2.new(1, 0, 1, 0)
 MainPage.BackgroundTransparency = 1
 MainPage.Parent = Content
 
 local StatusLabel = Instance.new("TextLabel")
-StatusLabel.Size = UDim2.new(1, -20, 0, 24)
-StatusLabel.Position = UDim2.new(0, 10, 0, 8)
+StatusLabel.Size = UDim2.new(1, -20, 0, 22)
+StatusLabel.Position = UDim2.new(0, 10, 0, 4)
 StatusLabel.BackgroundTransparency = 1
 StatusLabel.Text = "Status: Stopped"
 StatusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
@@ -459,8 +760,8 @@ StatusLabel.TextXAlignment = Enum.TextXAlignment.Left
 StatusLabel.Parent = MainPage
 
 local DepositedLabel = Instance.new("TextLabel")
-DepositedLabel.Size = UDim2.new(1, -20, 0, 22)
-DepositedLabel.Position = UDim2.new(0, 10, 0, 32)
+DepositedLabel.Size = UDim2.new(1, -20, 0, 18)
+DepositedLabel.Position = UDim2.new(0, 10, 0, 24)
 DepositedLabel.BackgroundTransparency = 1
 DepositedLabel.Text = "Deposited: 0"
 DepositedLabel.TextColor3 = Color3.fromRGB(160, 160, 180)
@@ -469,7 +770,79 @@ DepositedLabel.TextSize = 13
 DepositedLabel.TextXAlignment = Enum.TextXAlignment.Left
 DepositedLabel.Parent = MainPage
 
--- Функция создания красивого тоггла
+local ZoneBar = Instance.new("Frame")
+ZoneBar.Size = UDim2.new(1, -20, 0, 46)
+ZoneBar.Position = UDim2.new(0, 10, 0, 50)
+ZoneBar.BackgroundColor3 = Color3.fromRGB(32, 32, 44)
+ZoneBar.Parent = MainPage
+Instance.new("UICorner", ZoneBar).CornerRadius = UDim.new(0, 16)
+local ZoneStroke = Instance.new("UIStroke", ZoneBar)
+ZoneStroke.Color = Color3.fromRGB(70, 70, 90)
+ZoneStroke.Thickness = 1.2
+
+local ZoneTitle = Instance.new("TextLabel")
+ZoneTitle.Size = UDim2.new(1, -150, 1, 0)
+ZoneTitle.Position = UDim2.new(0, 14, 0, 0)
+ZoneTitle.BackgroundTransparency = 1
+ZoneTitle.Text = "Выбор зоны фарма"
+ZoneTitle.TextColor3 = Color3.fromRGB(230, 230, 240)
+ZoneTitle.Font = Enum.Font.Gotham
+ZoneTitle.TextSize = 14
+ZoneTitle.TextXAlignment = Enum.TextXAlignment.Left
+ZoneTitle.Parent = ZoneBar
+
+local ZonePick = Instance.new("TextButton")
+ZonePick.Size = UDim2.new(0, 118, 0, 32)
+ZonePick.Position = UDim2.new(1, -126, 0.5, -16)
+ZonePick.BackgroundColor3 = Color3.fromRGB(24, 24, 32)
+ZonePick.Text = Zones[currentZone].name .. "  v"
+ZonePick.TextColor3 = Color3.new(1, 1, 1)
+ZonePick.Font = Enum.Font.GothamBold
+ZonePick.TextSize = 13
+ZonePick.Parent = ZoneBar
+Instance.new("UICorner", ZonePick).CornerRadius = UDim.new(0, 10)
+local PickStroke = Instance.new("UIStroke", ZonePick)
+PickStroke.Color = Color3.fromRGB(90, 90, 110)
+
+local ZoneList = Instance.new("Frame")
+ZoneList.Size = UDim2.new(0, 118, 0, 168)
+ZoneList.Position = UDim2.new(0, 232, 0, 98)
+ZoneList.BackgroundColor3 = Color3.fromRGB(24, 24, 32)
+ZoneList.Visible = false
+ZoneList.ZIndex = 5
+ZoneList.Parent = MainPage
+Instance.new("UICorner", ZoneList).CornerRadius = UDim.new(0, 10)
+local ListStroke = Instance.new("UIStroke", ZoneList)
+ListStroke.Color = Color3.fromRGB(90, 90, 110)
+
+local function drawZone()
+    ZonePick.Text = Zones[currentZone].name .. "  v"
+end
+
+for i = 1, 5 do
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(1, -8, 0, 28)
+    btn.Position = UDim2.new(0, 4, 0, 6 + (i - 1) * 32)
+    btn.BackgroundColor3 = Color3.fromRGB(35, 35, 48)
+    btn.Text = Zones[i].name
+    btn.TextColor3 = Color3.new(1, 1, 1)
+    btn.Font = Enum.Font.Gotham
+    btn.TextSize = 13
+    btn.ZIndex = 6
+    btn.Parent = ZoneList
+    Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 8)
+    btn.MouseButton1Click:Connect(function()
+        applyZone(i)
+        drawZone()
+        ZoneList.Visible = false
+        deposited = 0
+    end)
+end
+
+ZonePick.MouseButton1Click:Connect(function()
+    ZoneList.Visible = not ZoneList.Visible
+end)
+
 local function createToggle(parent, text, yPos, defaultState, callback)
     local frame = Instance.new("Frame")
     frame.Size = UDim2.new(1, -20, 0, 42)
@@ -477,7 +850,7 @@ local function createToggle(parent, text, yPos, defaultState, callback)
     frame.BackgroundColor3 = Color3.fromRGB(32, 32, 44)
     frame.Parent = parent
     Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 8)
-    
+
     local label = Instance.new("TextLabel")
     label.Size = UDim2.new(1, -70, 1, 0)
     label.Position = UDim2.new(0, 12, 0, 0)
@@ -488,7 +861,7 @@ local function createToggle(parent, text, yPos, defaultState, callback)
     label.TextSize = 14
     label.TextXAlignment = Enum.TextXAlignment.Left
     label.Parent = frame
-    
+
     local toggleBtn = Instance.new("TextButton")
     toggleBtn.Size = UDim2.new(0, 50, 0, 26)
     toggleBtn.Position = UDim2.new(1, -60, 0.5, -13)
@@ -499,7 +872,7 @@ local function createToggle(parent, text, yPos, defaultState, callback)
     toggleBtn.TextSize = 12
     toggleBtn.Parent = frame
     Instance.new("UICorner", toggleBtn).CornerRadius = UDim.new(0, 6)
-    
+
     local state = defaultState
     toggleBtn.MouseButton1Click:Connect(function()
         state = not state
@@ -507,83 +880,158 @@ local function createToggle(parent, text, yPos, defaultState, callback)
         toggleBtn.Text = state and "ON" or "OFF"
         callback(state)
     end)
-    
-    return function(newState) -- возможность обновить снаружи
+
+    return function(newState)
         state = newState
         toggleBtn.BackgroundColor3 = state and Color3.fromRGB(70, 140, 90) or Color3.fromRGB(60, 60, 75)
         toggleBtn.Text = state and "ON" or "OFF"
     end
 end
 
-local updateFarmToggle = createToggle(MainPage, "Auto Farm", 70, false, function(state)
+local updateFarmToggle = createToggle(MainPage, "Автофарм", 118, running, function(state)
     running = state
     StatusLabel.Text = state and "Status: Running" or "Status: Stopped"
     StatusLabel.TextColor3 = state and Color3.fromRGB(100, 255, 140) or Color3.fromRGB(255, 100, 100)
+    saveConfig()
 end)
 
-local updateResetToggle = createToggle(MainPage, "Auto Reset Scale", 125, true, function(state)
+local updateResetToggle = createToggle(MainPage, "Автосдача", 168, autoReset, function(state)
     autoReset = state
+    saveConfig()
 end)
 
--- ========== PLAYER PAGE ==========
-local PlayerPage = Instance.new("Frame")
-PlayerPage.Size = UDim2.new(1, 0, 1, 0)
-PlayerPage.BackgroundTransparency = 1
-PlayerPage.Visible = false
-PlayerPage.Parent = Content
-
-local function createPlayerControl(name, yPos, defaultValue, callback)
-    local label = Instance.new("TextLabel")
-    label.Size = UDim2.new(0.5, 0, 0, 28)
-    label.Position = UDim2.new(0, 10, 0, yPos)
-    label.BackgroundTransparency = 1
-    label.Text = name
-    label.TextColor3 = Color3.fromRGB(190, 190, 210)
-    label.Font = Enum.Font.Gotham
-    label.TextSize = 14
-    label.TextXAlignment = Enum.TextXAlignment.Left
-    label.Parent = PlayerPage
-    
-    local box = Instance.new("TextBox")
-    box.Size = UDim2.new(0.38, 0, 0, 30)
-    box.Position = UDim2.new(0.55, 0, 0, yPos)
-    box.BackgroundColor3 = Color3.fromRGB(35, 35, 48)
-    box.Text = tostring(defaultValue)
-    box.TextColor3 = Color3.fromRGB(230, 230, 245)
-    box.Font = Enum.Font.Gotham
-    box.TextSize = 14
-    box.Parent = PlayerPage
-    Instance.new("UICorner", box).CornerRadius = UDim.new(0, 6)
-    
-    box.FocusLost:Connect(function()
-        local num = tonumber(box.Text)
-        if num and humanoid then
-            callback(num)
-            box.Text = tostring(num)
-        end
-    end)
+-- Очистка преград в DustSite (оставляем DesertFloor / DesertRiser и всё похожее)
+local function shouldKeep(name)
+    name = string.lower(name or "")
+    return string.find(name, "desertfloor", 1, true)
+        or string.find(name, "desertriser", 1, true)
+        or string.find(name, "desert_floor", 1, true)
+        or string.find(name, "desert floor", 1, true)
 end
 
-createPlayerControl("WalkSpeed", 20, 16, function(v)
-    if humanoid then humanoid.WalkSpeed = v end
+local function clearDustSiteObstacles()
+    local map = workspace:FindFirstChild("0Map")
+    if not map then
+        warn("0Map не найден")
+        return
+    end
+    local dust22 = map:FindFirstChild("dust22")
+    if not dust22 then
+        warn("dust22 не найден")
+        return
+    end
+    local site = dust22:FindFirstChild("DustSite")
+    if not site then
+        warn("DustSite не найден")
+        return
+    end
+
+    local removed = 0
+    -- удаляем прямых детей
+    for _, child in ipairs(site:GetChildren()) do
+        if not shouldKeep(child.Name) then
+            pcall(function()
+                child:Destroy()
+            end)
+            removed += 1
+        end
+    end
+    print("DustSite: удалено объектов —", removed)
+end
+
+-- Кнопка в стиле GUI (как тогглы)
+local ClearFrame = Instance.new("Frame")
+ClearFrame.Size = UDim2.new(1, -20, 0, 42)
+ClearFrame.Position = UDim2.new(0, 10, 0, 220)
+ClearFrame.BackgroundColor3 = Color3.fromRGB(32, 32, 44)
+ClearFrame.Parent = MainPage
+Instance.new("UICorner", ClearFrame).CornerRadius = UDim.new(0, 8)
+
+local ClearBtn = Instance.new("TextButton")
+ClearBtn.Size = UDim2.new(1, 0, 1, 0)
+ClearBtn.Position = UDim2.new(0, 0, 0, 0)
+ClearBtn.BackgroundTransparency = 1
+ClearBtn.AutoButtonColor = false
+ClearBtn.Text = "    Убрать преграды (CLIENT)                                            👆"
+ClearBtn.TextColor3 = Color3.fromRGB(220, 220, 235)
+ClearBtn.Font = Enum.Font.Gotham
+ClearBtn.TextSize = 14
+ClearBtn.TextXAlignment = Enum.TextXAlignment.Left
+ClearBtn.Parent = ClearFrame
+
+local NORMAL_BG = Color3.fromRGB(32, 32, 44)
+local HOVER_BG = Color3.fromRGB(42, 42, 58)
+
+ClearBtn.MouseEnter:Connect(function()
+    ClearFrame.BackgroundColor3 = HOVER_BG
+end)
+ClearBtn.MouseLeave:Connect(function()
+    ClearFrame.BackgroundColor3 = NORMAL_BG
 end)
 
-createPlayerControl("JumpPower", 70, 50, function(v)
-    if humanoid then humanoid.JumpPower = v end
+ClearBtn.MouseButton1Click:Connect(function()
+    clearDustSiteObstacles()
 end)
 
-local PlayerHint = Instance.new("TextLabel")
-PlayerHint.Size = UDim2.new(1, -20, 0, 40)
-PlayerHint.Position = UDim2.new(0, 10, 0, 130)
-PlayerHint.BackgroundTransparency = 1
-PlayerHint.Text = "Значения применяются сразу\nпосле нажатия Enter"
-PlayerHint.TextColor3 = Color3.fromRGB(140, 140, 160)
-PlayerHint.Font = Enum.Font.Gotham
-PlayerHint.TextSize = 12
-PlayerHint.TextXAlignment = Enum.TextXAlignment.Left
-PlayerHint.Parent = PlayerPage
+local GachaFrame = Instance.new("Frame")
+GachaFrame.Size = UDim2.new(1, -20, 0, 42)
+GachaFrame.Position = UDim2.new(0, 10, 0, 268)
+GachaFrame.BackgroundColor3 = Color3.fromRGB(32, 32, 44)
+GachaFrame.Parent = MainPage
+Instance.new("UICorner", GachaFrame).CornerRadius = UDim.new(0, 8)
 
--- ========== SETTINGS PAGE ==========
+local GachaBtn = Instance.new("TextButton")
+GachaBtn.Size = UDim2.new(1, 0, 1, 0)
+GachaBtn.Position = UDim2.new(0, 0, 0, 0)
+GachaBtn.BackgroundTransparency = 1
+GachaBtn.AutoButtonColor = false
+GachaBtn.Text = "    Убрать GachaReveal (CLIENT)                                                        👆"
+GachaBtn.TextColor3 = Color3.fromRGB(220, 220, 235)
+GachaBtn.Font = Enum.Font.Gotham
+GachaBtn.TextSize = 14
+GachaBtn.TextXAlignment = Enum.TextXAlignment.Left
+GachaBtn.Parent = GachaFrame
+
+GachaBtn.MouseEnter:Connect(function()
+    GachaFrame.BackgroundColor3 = HOVER_BG
+end)
+GachaBtn.MouseLeave:Connect(function()
+    GachaFrame.BackgroundColor3 = NORMAL_BG
+end)
+
+GachaBtn.MouseButton1Click:Connect(function()
+    removeGachaReveal()
+end)
+
+local function removeGachaReveal()
+    local rs = game:GetService("ReplicatedStorage")
+    local remotes = rs:FindFirstChild("Remotes")
+    if not remotes then
+        warn("Remotes не найден")
+        return
+    end
+    local gacha = remotes:FindFirstChild("GachaReveal")
+    if gacha then
+        pcall(function()
+            gacha:Destroy()
+        end)
+        print("GachaReveal удалён")
+    else
+        warn("GachaReveal не найден")
+    end
+end
+
+local ZoneHint = Instance.new("TextLabel")
+ZoneHint.Size = UDim2.new(1, -20, 0, 28)
+ZoneHint.Position = UDim2.new(0, 10, 0, 316)
+ZoneHint.BackgroundTransparency = 1
+ZoneHint.Text = "1 и 2 зона пока без предметов. Автосдача отдельно."
+ZoneHint.TextColor3 = Color3.fromRGB(140, 140, 160)
+ZoneHint.Font = Enum.Font.Gotham
+ZoneHint.TextSize = 12
+ZoneHint.TextXAlignment = Enum.TextXAlignment.Left
+ZoneHint.Parent = MainPage
+
 local SettingsPage = Instance.new("Frame")
 SettingsPage.Size = UDim2.new(1, 0, 1, 0)
 SettingsPage.BackgroundTransparency = 1
@@ -601,7 +1049,7 @@ local function createSetting(name, yPos, default, callback)
     label.TextSize = 14
     label.TextXAlignment = Enum.TextXAlignment.Left
     label.Parent = SettingsPage
-    
+
     local box = Instance.new("TextBox")
     box.Size = UDim2.new(0.35, 0, 0, 28)
     box.Position = UDim2.new(0.6, 0, 0, yPos)
@@ -612,7 +1060,7 @@ local function createSetting(name, yPos, default, callback)
     box.TextSize = 14
     box.Parent = SettingsPage
     Instance.new("UICorner", box).CornerRadius = UDim.new(0, 6)
-    
+
     box.FocusLost:Connect(function()
         local num = tonumber(box.Text)
         if num then
@@ -622,14 +1070,11 @@ local function createSetting(name, yPos, default, callback)
     end)
 end
 
-createSetting("Max Step (studs)", 15, Settings.maxStep, function(v) Settings.maxStep = v end)
-createSetting("Step Delay (sec)", 55, Settings.stepDelay, function(v) Settings.stepDelay = v end)
-createSetting("Pickup Wait", 95, Settings.pickupWait, function(v) Settings.pickupWait = v end)
-createSetting("Clicks in Hole", 135, Settings.depositClicks, function(v) Settings.depositClicks = v end)
-createSetting("Reset Every X items", 175, Settings.resetEvery, function(v) Settings.resetEvery = v end)
-createSetting("Throw Radius", 215, Settings.throwRadius, function(v) Settings.throwRadius = v end)
+createSetting("Max Step (studs)", 15, Settings.maxStep, function(v) Settings.maxStep = v saveConfig() end)
+createSetting("Step Delay (sec)", 55, Settings.stepDelay, function(v) Settings.stepDelay = v saveConfig() end)
+createSetting("Pickup Wait", 95, Settings.pickupWait, function(v) Settings.pickupWait = v saveConfig() end)
+createSetting("Throw Radius", 135, Settings.throwRadius, function(v) Settings.throwRadius = v saveConfig() end)
 
--- ========== INFO PAGE ==========
 local InfoPage = Instance.new("Frame")
 InfoPage.Size = UDim2.new(1, 0, 1, 0)
 InfoPage.BackgroundTransparency = 1
@@ -640,7 +1085,7 @@ local InfoText = Instance.new("TextLabel")
 InfoText.Size = UDim2.new(1, -20, 1, -20)
 InfoText.Position = UDim2.new(0, 10, 0, 10)
 InfoText.BackgroundTransparency = 1
-InfoText.Text = "Item Farm Hub\n\n• Auto Farm + Auto Reset Scale\n• Защита от улёта\n• Работает после смерти\n• Вкладка Player (скорость/прыжок)\n\nF — быстрый старт/стоп\n–  — свернуть в квадратик"
+InfoText.Text = "Item Farm Hub\n\nMain: зона, автофарм, автосдача\nАвтосдача не зависит от фарма\n1 и 2 зона ждут координаты\n\nF - старт/стоп фарма\n- свернуть"
 InfoText.TextColor3 = Color3.fromRGB(170, 170, 190)
 InfoText.Font = Enum.Font.Gotham
 InfoText.TextSize = 14
@@ -648,45 +1093,41 @@ InfoText.TextXAlignment = Enum.TextXAlignment.Left
 InfoText.TextYAlignment = Enum.TextYAlignment.Top
 InfoText.Parent = InfoPage
 
--- Переключение вкладок
 local function switchTab(tab)
     currentTab = tab
     MainPage.Visible = (tab == "Main")
-    PlayerPage.Visible = (tab == "Player")
     SettingsPage.Visible = (tab == "Settings")
     InfoPage.Visible = (tab == "Info")
-    
+
     local active = Color3.fromRGB(55, 55, 80)
     local inactive = Color3.fromRGB(30, 30, 42)
     local activeText = Color3.fromRGB(255, 255, 255)
     local inactiveText = Color3.fromRGB(180, 180, 200)
-    
+
     TabMain.BackgroundColor3 = (tab == "Main") and active or inactive
-    TabPlayer.BackgroundColor3 = (tab == "Player") and active or inactive
     TabSettings.BackgroundColor3 = (tab == "Settings") and active or inactive
     TabInfo.BackgroundColor3 = (tab == "Info") and active or inactive
-    
     TabMain.TextColor3 = (tab == "Main") and activeText or inactiveText
-    TabPlayer.TextColor3 = (tab == "Player") and activeText or inactiveText
     TabSettings.TextColor3 = (tab == "Settings") and activeText or inactiveText
     TabInfo.TextColor3 = (tab == "Info") and activeText or inactiveText
 end
 
 TabMain.MouseButton1Click:Connect(function() switchTab("Main") end)
-TabPlayer.MouseButton1Click:Connect(function() switchTab("Player") end)
 TabSettings.MouseButton1Click:Connect(function() switchTab("Settings") end)
 TabInfo.MouseButton1Click:Connect(function() switchTab("Info") end)
 
--- Обновление счётчика + синхронизация тоггла
 task.spawn(function()
     while ScreenGui.Parent do
-        DepositedLabel.Text = "Deposited: " .. deposited
+        DepositedLabel.Text = "Deposited: " .. deposited .. "  |  " .. Zones[currentZone].name
+        if ZonePick then
+            ZonePick.Text = Zones[currentZone].name .. "  v"
+        end
         updateFarmToggle(running)
+        updateResetToggle(autoReset)
         task.wait(0.35)
     end
 end)
 
--- Клавиша F
 UIS.InputBegan:Connect(function(input, gp)
     if gp then return end
     if input.KeyCode == Enum.KeyCode.F then
@@ -694,10 +1135,10 @@ UIS.InputBegan:Connect(function(input, gp)
         updateFarmToggle(running)
         StatusLabel.Text = running and "Status: Running" or "Status: Stopped"
         StatusLabel.TextColor3 = running and Color3.fromRGB(100, 255, 140) or Color3.fromRGB(255, 100, 100)
+        saveConfig()
     end
 end)
 
--- Перетаскивание
 local function makeDraggable(frame, handle)
     local dragging, dragInput, dragStart, startPos
     handle.InputBegan:Connect(function(input)
@@ -721,19 +1162,7 @@ local function makeDraggable(frame, handle)
     end)
 end
 
--- Независимый автосброс шкалы
-task.spawn(function()
-    while task.wait(3) do
-        if autoReset then
-            pcall(function()
-                game:GetService("ReplicatedStorage").Remotes.HoleGiveMe:InvokeServer()
-            end)
-        end
-    end
-end)
-
 makeDraggable(Main, TitleBar)
 makeDraggable(Mini, Mini)
-
 switchTab("Main")
-print("Farm Hub обновлён | Вкладка Player добавлена")
+print("Farm Hub: зоны на Main")
