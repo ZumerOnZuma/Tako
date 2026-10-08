@@ -574,7 +574,7 @@ task.spawn(function()
                         local isRoadroller = string.lower((item.Name or ""):gsub("%s+", "")) == "roadrolleeeeerr"
                         -- 5 зона: чуть быстрее к предмету
                         if currentZone == 5 then
-                            Settings.maxStep = math.max(originalMaxStep * 1.25, 6)
+                            Settings.maxStep = math.max(originalMaxStep * 1.75, 6)
                         end
 
                         -- без ускорения на 5 зоне — меньше флагов Unfair movement
