@@ -553,7 +553,7 @@ task.spawn(function()
 
                         -- 5 зона: к предмету чуть быстрее (не 80 — кикает Unfair movement)
                         if currentZone == 5 then
-                            Settings.maxStep = math.max(originalMaxStep * 2.2, 14)
+                            Settings.maxStep = math.max(originalMaxStep * 1.35, 8)
                         end
 
                         -- если далеко — один раз прыгаем ближе к предмету, потом летим
