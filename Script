@@ -408,9 +408,11 @@ local function ensureAboveGround(pos)
     return pos
 end
 
--- Если предмет дальше 40 студов — плавно подлетаем ближе (БЕЗ резкого CFrame ТП)
 local APPROACH_DIST = 40
 local APPROACH_OFFSET = 28
+
+-- forward declaration: jumpNearItem вызывает safeTeleport
+local safeTeleport
 
 local function jumpNearItem(itemPos)
     if not root or not root.Parent then return false end
@@ -430,11 +432,11 @@ local function jumpNearItem(itemPos)
     approach = ensureAboveGround(approach)
     if not isValidPosition(approach) then return false end
 
-    -- плавный подлёт вместо мгновенного ТП (меньше киков и провалов)
+    -- плавный подлёт вместо мгновенного ТП
     return safeTeleport(approach, nil)
 end
 
-local function safeTeleport(targetPos, targetItem)
+safeTeleport = function(targetPos, targetItem)
     if not root or not root.Parent then return false end
     if not isValidPosition(targetPos) then forceSafe() return false end
     if targetItem and not isItemStillValid(targetItem) then forceSafe() return false end
