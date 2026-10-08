@@ -379,95 +379,44 @@ local function getClosestItem()
     return closest
 end
 
--- Не проваливаться под карту: поднимаем точку над землёй через raycast
-local function ensureAboveGround(pos)
-    if typeof(pos) ~= "Vector3" then return pos end
-    local origin = pos + Vector3.new(0, 80, 0)
-    local dir = Vector3.new(0, -200, 0)
-    local params = RaycastParams.new()
-    params.FilterType = Enum.RaycastFilterType.Exclude
-    local exclude = {}
-    if character then table.insert(exclude, character) end
-    local spawned = workspace:FindFirstChild("SpawnedItems")
-    if spawned then table.insert(exclude, spawned) end
-    params.FilterDescendantsInstances = exclude
-    params.IgnoreWater = true
-
-    local hit = workspace:Raycast(origin, dir, params)
-    if hit then
-        local safeY = hit.Position.Y + 4
-        if pos.Y < safeY then
-            return Vector3.new(pos.X, safeY, pos.Z)
-        end
-    else
-        -- нет пола — не уходим слишком низко
-        if pos.Y < -20 then
-            return Vector3.new(pos.X, -10, pos.Z)
-        end
-    end
-    return pos
-end
-
+-- Если предмет дальше 40 студов — один мягкий подлёт ближе (без резкого ТП)
 local APPROACH_DIST = 40
 local APPROACH_OFFSET = 28
 
--- forward declaration: jumpNearItem вызывает safeTeleport
-local safeTeleport
-
-local function jumpNearItem(itemPos)
-    if not root or not root.Parent then return false end
-    local dist = (itemPos - root.Position).Magnitude
-    if dist <= APPROACH_DIST then
-        return true
-    end
-
-    local dir = root.Position - itemPos
-    if dir.Magnitude < 1 then
-        dir = Vector3.new(0, 0, 1)
-    else
-        dir = dir.Unit
-    end
-
-    local approach = itemPos + dir * APPROACH_OFFSET + Vector3.new(0, 5, 0)
-    approach = ensureAboveGround(approach)
-    if not isValidPosition(approach) then return false end
-
-    -- плавный подлёт вместо мгновенного ТП
-    return safeTeleport(approach, nil)
-end
-
-safeTeleport = function(targetPos, targetItem)
+local function safeTeleport(targetPos, targetItem)
     if not root or not root.Parent then return false end
     if not isValidPosition(targetPos) then forceSafe() return false end
     if targetItem and not isItemStillValid(targetItem) then forceSafe() return false end
 
-    targetPos = ensureAboveGround(targetPos)
-
     local current = root.Position
     if not isValidPosition(current) then forceSafe() return false end
 
-    -- если уже под картой — сначала вытаскиваем
+    -- вытащить из-под карты
     if current.Y < -25 then
-        local fixed = ensureAboveGround(Vector3.new(current.X, -8, current.Z))
-        root.CFrame = CFrame.new(fixed)
-        root.AssemblyLinearVelocity = Vector3.zero
-        task.wait(0.15)
-        current = root.Position
+        local fixed = Vector3.new(current.X, math.max(targetPos.Y, 2), current.Z)
+        if isValidPosition(fixed) then
+            root.CFrame = CFrame.new(fixed)
+            root.AssemblyLinearVelocity = Vector3.zero
+            task.wait(0.1)
+            current = root.Position
+        else
+            forceSafe()
+            return false
+        end
     end
 
     root.AssemblyLinearVelocity = Vector3.zero
     root.AssemblyAngularVelocity = Vector3.zero
 
     local totalDist = (targetPos - current).Magnitude
-    if totalDist > 500 then forceSafe() return false end
+    if totalDist > 600 then forceSafe() return false end
 
-    -- спокойная скорость (меньше Unfair movement)
-    local speed = math.clamp(Settings.maxStep / math.max(Settings.stepDelay, 0.03), 18, 70)
+    local speed = math.clamp(Settings.maxStep / math.max(Settings.stepDelay, 0.03), 20, 80)
     if totalDist < 4 then
-        speed = math.min(speed, 35)
+        speed = math.min(speed, 40)
     end
 
-    local segmentLen = math.clamp(Settings.maxStep * 2.5, 10, 30)
+    local segmentLen = math.clamp(Settings.maxStep * 3, 12, 35)
     local segments = math.max(1, math.ceil(totalDist / segmentLen))
 
     for i = 1, segments do
@@ -475,11 +424,10 @@ safeTeleport = function(targetPos, targetItem)
         if targetItem and not isItemStillValid(targetItem) then forceSafe() return false end
 
         local nextPos = current:Lerp(targetPos, i / segments)
-        nextPos = ensureAboveGround(nextPos)
         if not isValidPosition(nextPos) then forceSafe() return false end
 
         local segDist = (nextPos - root.Position).Magnitude
-        local t = math.clamp(segDist / speed, 0.06, 1.4)
+        local t = math.clamp(segDist / speed, 0.05, 1.3)
 
         local tw = TweenService:Create(
             root,
@@ -506,12 +454,9 @@ safeTeleport = function(targetPos, targetItem)
                 forceSafe()
                 return false
             end
-            -- если провалились во время твина — отмена и подъём
             if root.Position.Y < -25 then
                 tw:Cancel()
-                local fixed = ensureAboveGround(root.Position)
-                root.CFrame = CFrame.new(fixed)
-                root.AssemblyLinearVelocity = Vector3.zero
+                forceSafe()
                 return false
             end
             root.AssemblyLinearVelocity = Vector3.zero
@@ -525,6 +470,26 @@ safeTeleport = function(targetPos, targetItem)
         root.AssemblyAngularVelocity = Vector3.zero
     end
     return true
+end
+
+local function jumpNearItem(itemPos)
+    if not root or not root.Parent then return false end
+    local dist = (itemPos - root.Position).Magnitude
+    if dist <= APPROACH_DIST then
+        return true
+    end
+
+    local dir = root.Position - itemPos
+    if dir.Magnitude < 1 then
+        dir = Vector3.new(0, 0, 1)
+    else
+        dir = dir.Unit
+    end
+
+    local approach = itemPos + dir * APPROACH_OFFSET + Vector3.new(0, 4, 0)
+    if not isValidPosition(approach) then return false end
+
+    return safeTeleport(approach, nil)
 end
 
 local function pickupItem(item)
