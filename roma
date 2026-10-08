@@ -572,6 +572,10 @@ task.spawn(function()
                     if itemPos and isValidPosition(itemPos) then
                         local originalMaxStep = Settings.maxStep
                         local isRoadroller = string.lower((item.Name or ""):gsub("%s+", "")) == "roadrolleeeeerr"
+                        -- 5 зона: чуть быстрее к предмету
+                        if currentZone == 5 then
+                            Settings.maxStep = math.max(originalMaxStep * 1.25, 6)
+                        end
 
                         -- без ускорения на 5 зоне — меньше флагов Unfair movement
                         -- если далеко — один мягкий подлёт ближе, потом летим к предмету
