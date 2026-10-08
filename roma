@@ -71,7 +71,7 @@ local Settings = {
     pickupWait = 0.28,
     depositClicks = 3,
     resetEvery = 4,
-    throwRadius = 18,
+    throwRadius = 13,
 }
 
 local deposited = 0
@@ -231,19 +231,18 @@ player.CharacterAdded:Connect(function(char)
     setupCharacter(char)
 end)
 
-local THROW_HEIGHT = 6.5 -- выше, чтобы не затягивало в дыру
-local MIN_THROW_RADIUS = 18 -- минимальный отступ от дыры
+local THROW_HEIGHT = 3.2
 
 local function safePos()
-    -- НЕ над дырой — сбоку и выше (иначе forceSafe кидает в яму → флаг)
+    -- аварийная точка сбоку от дыры (forceSafe не должен кидать В яму)
     if not holePos then
-        return (root and root.Position + Vector3.new(0, 5, 0)) or Vector3.new(0, 8, 0)
+        return (root and root.Position) or Vector3.new(0, 8, 0)
     end
-    local side = Vector3.new(20, 8, 12)
+    local side = Vector3.new(16, 6, 0)
     if root then
         local flat = (root.Position - holePos) * Vector3.new(1, 0, 1)
         if flat.Magnitude > 1 then
-            side = flat.Unit * 20 + Vector3.new(0, 8, 0)
+            side = flat.Unit * 16 + Vector3.new(0, 6, 0)
         end
     end
     return holePos + side
@@ -420,7 +419,7 @@ local function safeTeleport(targetPos, targetItem)
     local totalDist = (targetPos - current).Magnitude
     if totalDist > 600 then forceSafe() return false end
 
-    local speed = math.clamp(Settings.maxStep / math.max(Settings.stepDelay, 0.03), 20, 80)
+    local speed = math.clamp(Settings.maxStep / math.max(Settings.stepDelay, 0.03), 18, 55)
     if totalDist < 4 then
         speed = math.min(speed, 40)
     end
@@ -525,9 +524,7 @@ local function getBestThrowPosition(fromPos)
     else
         direction = direction.Unit
     end
-    local radius = math.max(Settings.throwRadius or 13, MIN_THROW_RADIUS)
-    -- точка сдачи: далеко от края дыры + высоко
-    return targetHole + direction * radius + Vector3.new(0, THROW_HEIGHT, 0)
+    return targetHole + direction * Settings.throwRadius + Vector3.new(0, THROW_HEIGHT, 0)
 end
 
 local function aimCameraAtHole()
@@ -576,12 +573,8 @@ task.spawn(function()
                         local originalMaxStep = Settings.maxStep
                         local isRoadroller = string.lower((item.Name or ""):gsub("%s+", "")) == "roadrolleeeeerr"
 
-                        -- 5 зона: к предмету чуть быстрее обычного (мягко, меньше киков)
-                        if currentZone == 5 then
-                            Settings.maxStep = math.max(originalMaxStep * 1.35, 8)
-                        end
-
-                        -- если далеко — один раз прыгаем ближе к предмету, потом летим
+                        -- без ускорения на 5 зоне — меньше флагов Unfair movement
+                        -- если далеко — один мягкий подлёт ближе, потом летим к предмету
                         if not jumpNearItem(itemPos) then
                             Settings.maxStep = originalMaxStep
                             forceSafe()
@@ -603,22 +596,7 @@ task.spawn(function()
                                     if safeTeleport(throwPos, nil) then
                                         task.wait(0.09)
                                         throwItem()
-                                        task.wait(0.15)
-                                        -- сразу отойти от дыры, чтобы не затянуло и не зафлажило
-                                        if root and root.Parent and holePos then
-                                            local away = (root.Position - holePos) * Vector3.new(1, 0, 1)
-                                            if away.Magnitude < 1 then
-                                                away = Vector3.new(1, 0, 0)
-                                            else
-                                                away = away.Unit
-                                            end
-                                            local back = root.Position + away * 10 + Vector3.new(0, 2, 0)
-                                            if isValidPosition(back) then
-                                                root.CFrame = CFrame.new(back)
-                                                root.AssemblyLinearVelocity = Vector3.zero
-                                            end
-                                        end
-                                        task.wait(0.2)
+                                        task.wait(0.28)
                                         deposited += 1
                                     else
                                         forceSafe()
