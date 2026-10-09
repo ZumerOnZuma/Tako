@@ -422,7 +422,7 @@ local function jumpNearItem(itemPos)
     return true
 end
 
-local function safeTeleport(targetPos, targetItem)
+local function safeTeleport(targetPos, targetItem, keepNearHole)
     if not root or not root.Parent then return false end
     if not isValidPosition(targetPos) then forceSafe() return false end
     if targetItem and not isItemStillValid(targetItem) then forceSafe() return false end
@@ -433,7 +433,9 @@ local function safeTeleport(targetPos, targetItem)
     root.AssemblyLinearVelocity = Vector3.zero
     root.AssemblyAngularVelocity = Vector3.zero
 
-    targetPos = pushOutOfHole(targetPos)
+    if not keepNearHole then
+        targetPos = pushOutOfHole(targetPos)
+    end
     local totalDist = (targetPos - current).Magnitude
     if totalDist > 700 then forceSafe() return false end
 
@@ -449,7 +451,10 @@ local function safeTeleport(targetPos, targetItem)
         if not running or not root or not root.Parent then forceSafe() return false end
         if targetItem and not isItemStillValid(targetItem) then forceSafe() return false end
 
-        local nextPos = pushOutOfHole(current:Lerp(targetPos, i / segments))
+        local nextPos = current:Lerp(targetPos, i / segments)
+        if not keepNearHole then
+            nextPos = pushOutOfHole(nextPos)
+        end
         if not isValidPosition(nextPos) then forceSafe() return false end
 
         local segDist = (nextPos - root.Position).Magnitude
@@ -517,15 +522,17 @@ local function getBestThrowPosition(fromPos)
     else
         direction = direction.Unit
     end
-    local radius = math.max(Settings.throwRadius, 18)
-    return pushOutOfHole(targetHole + direction * radius + Vector3.new(0, THROW_HEIGHT + 2, 0))
+    -- ползунок радиуса работает и на 5 зоне, без принудительных 18
+    local radius = math.clamp(Settings.throwRadius or 13, 6, 40)
+    return targetHole + direction * radius + Vector3.new(0, 3, 0)
 end
 
 local function aimCameraAtHole()
     local cam = workspace.CurrentCamera
-    if not cam or not root then return end
-    local camPos = root.Position + Vector3.new(0, 1.7, 0)
-    cam.CFrame = CFrame.lookAt(camPos, holePos + Vector3.new(0, 0.8, 0))
+    if not cam or not root or not holePos then return end
+    local camPos = root.Position + Vector3.new(0, 1.4, 0)
+    -- целимся чуть ниже центра, чтобы дуга падала в хитбокс, а не перелетала
+    cam.CFrame = CFrame.lookAt(camPos, holePos + Vector3.new(0, -1.4, 0))
 end
 
 local function throwItem()
@@ -597,7 +604,7 @@ task.spawn(function()
 
                                     task.wait(Settings.pickupWait)
                                     local throwPos = getBestThrowPosition(itemPos)
-                                    if safeTeleport(throwPos, nil) then
+                                    if safeTeleport(throwPos, nil, true) then
                                         task.wait(0.09)
                                         throwItem()
                                         task.wait(0.28)
