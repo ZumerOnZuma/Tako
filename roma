@@ -289,12 +289,38 @@ local function forceSafe()
     if root and root.Parent then
         root.AssemblyLinearVelocity = Vector3.zero
         root.AssemblyAngularVelocity = Vector3.zero
-        -- аварийный возврат — один мягкий твин
+    end
+    if currentZone == 5 then
+        needStartPad = true
+        return
+    end
+    if root and root.Parent then
         local goal = {CFrame = CFrame.new(safePos())}
         local tw = TweenService:Create(root, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), goal)
         tw:Play()
         tw.Completed:Wait()
     end
+end
+
+local function walkTo(targetPos)
+    if not humanoid or not root or not root.Parent then return false end
+    local started = os.clock()
+    while running and root and root.Parent and humanoid.Health > 0 do
+        if root.Position.Y < -16 then
+            needStartPad = true
+            return false
+        end
+        local flat = Vector3.new(targetPos.X - root.Position.X, 0, targetPos.Z - root.Position.Z)
+        if flat.Magnitude < 7 then
+            return true
+        end
+        humanoid:MoveTo(Vector3.new(targetPos.X, root.Position.Y, targetPos.Z))
+        task.wait(0.25)
+        if os.clock() - started > 30 then
+            return false
+        end
+    end
+    return false
 end
 
 local function isOtherCharacter(model)
@@ -419,6 +445,9 @@ end
 
 local function safeTeleport(targetPos, targetItem)
     if not root or not root.Parent then return false end
+    if currentZone == 5 then
+        return walkTo(pushOutOfHole(targetPos))
+    end
     if not isValidPosition(targetPos) then forceSafe() return false end
     if targetItem and not isItemStillValid(targetItem) then forceSafe() return false end
 
