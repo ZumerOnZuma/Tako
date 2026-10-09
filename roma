@@ -64,6 +64,8 @@ local Zones = {
 local currentZone = 3
 local holePos = Zones[currentZone].hole
 local itemNames = Zones[currentZone].items
+local ZONE5_START = Vector3.new(78, -18.850000381469727, -192)
+local needStartPad = true
 
 local Settings = {
     maxStep = 4.5,
@@ -229,6 +231,9 @@ end
 player.CharacterAdded:Connect(function(char)
     task.wait(0.6)
     setupCharacter(char)
+    if currentZone == 5 then
+        needStartPad = true
+    end
 end)
 
 local THROW_HEIGHT = 3.2
@@ -513,6 +518,14 @@ task.spawn(function()
                     continue
                 end
                 holePos = mine
+            end
+            if currentZone == 5 and needStartPad then
+                local startPos = ZONE5_START + Vector3.new(0, 3, 0)
+                if root and (root.Position - startPos).Magnitude > 14 then
+                    safeTeleport(startPos, nil)
+                    task.wait(0.15)
+                end
+                needStartPad = false
             end
             if #itemNames == 0 then
                 task.wait(0.4)
@@ -803,6 +816,9 @@ for i = 1, 5 do
         drawZone()
         ZoneList.Visible = false
         deposited = 0
+        if i == 5 then
+            needStartPad = true
+        end
     end)
 end
 
@@ -857,6 +873,9 @@ end
 
 local updateFarmToggle = createToggle(MainPage, "Автофарм", 118, running, function(state)
     running = state
+    if state and currentZone == 5 then
+        needStartPad = true
+    end
     StatusLabel.Text = state and "Status: Running" or "Status: Stopped"
     StatusLabel.TextColor3 = state and Color3.fromRGB(100, 255, 140) or Color3.fromRGB(255, 100, 100)
     saveConfig()
@@ -882,28 +901,43 @@ local function clearDustSiteObstacles()
         warn("0Map не найден")
         return
     end
-    local dust22 = map:FindFirstChild("dust22")
-    if not dust22 then
-        warn("dust22 не найден")
-        return
-    end
-    local site = dust22:FindFirstChild("DustSite")
-    if not site then
-        warn("DustSite не найден")
-        return
-    end
 
     local removed = 0
-    -- удаляем прямых детей
-    for _, child in ipairs(site:GetChildren()) do
-        if not shouldKeep(child.Name) then
-            pcall(function()
-                child:Destroy()
-            end)
-            removed += 1
+    local dust22 = map:FindFirstChild("dust22")
+    local site = dust22 and dust22:FindFirstChild("DustSite")
+    if site then
+        for _, child in ipairs(site:GetChildren()) do
+            if not shouldKeep(child.Name) then
+                pcall(function()
+                    child:Destroy()
+                end)
+                removed += 1
+            end
         end
+    else
+        warn("DustSite не найден")
     end
-    print("DustSite: удалено объектов —", removed)
+
+    local river = map:FindFirstChild("RiverBay")
+    local riverSite = river and river:FindFirstChild("RiverSite")
+    local cliffs = riverSite and riverSite:FindFirstChild("Cliffs")
+    if cliffs then
+        for i = 1, 4 do
+            for _, name in ipairs({"RidgeLeft" .. i, "RidgeRight" .. i}) do
+                local ridge = cliffs:FindFirstChild(name)
+                if ridge then
+                    pcall(function()
+                        ridge:Destroy()
+                    end)
+                    removed += 1
+                end
+            end
+        end
+    else
+        warn("RiverBay.RiverSite.Cliffs не найден")
+    end
+
+    print("Преграды: удалено объектов —", removed)
 end
 
 -- Кнопка в стиле GUI (как тогглы)
@@ -1110,6 +1144,9 @@ UIS.InputBegan:Connect(function(input, gp)
     if gp then return end
     if input.KeyCode == Enum.KeyCode.F then
         running = not running
+        if running and currentZone == 5 then
+            needStartPad = true
+        end
         updateFarmToggle(running)
         StatusLabel.Text = running and "Status: Running" or "Status: Stopped"
         StatusLabel.TextColor3 = running and Color3.fromRGB(100, 255, 140) or Color3.fromRGB(255, 100, 100)
