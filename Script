@@ -65,6 +65,15 @@ local currentZone = 3
 local holePos = Zones[currentZone].hole
 local itemNames = Zones[currentZone].items
 local ZONE5_START = Vector3.new(78, -18.850000381469727, -192)
+local ZONE5_PADS = {
+    Vector3.new(77.7435073852539, -15.126978874206543, -319.9517822265625),
+    Vector3.new(-12.052742004394531, -15.057611465454102, -495.75677490234375),
+    Vector3.new(-11.232901573181152, -15.067667007446289, -760.8944091796875),
+    Vector3.new(-11.165106773376465, -15.115692138671875, -1025.759765625),
+    Vector3.new(169.91873168945312, -15.12697696685791, -1024.995361328125),
+    Vector3.new(165.90586853027344, -15.103299140930176, -759.1087036132812),
+    Vector3.new(165.60023498535156, -15.151168823242188, -494.0906982421875),
+}
 local pendingDeathReturn = false
 local returningFromDeath = false
 local slowReturnToPad
@@ -426,6 +435,18 @@ local function getClosestItem()
     return closest
 end
 
+local function closestPadTo(pos)
+    local best, bestDist = nil, math.huge
+    for _, pad in ipairs(ZONE5_PADS) do
+        local flat = Vector3.new(pad.X - pos.X, 0, pad.Z - pos.Z)
+        if flat.Magnitude < bestDist then
+            bestDist = flat.Magnitude
+            best = pad
+        end
+    end
+    return best
+end
+
 -- тело ниже, после safeTeleport: иначе после смерти летит отдельно и медленно
 function slowReturnToPad() end
 
@@ -596,6 +617,19 @@ task.spawn(function()
                 if item and not isHeldBySomeoneElse(item) then
                     local itemPos = getItemPos(item)
                     if itemPos and isValidPosition(itemPos) then
+                        if currentZone == 5 then
+                            local flatDist = Vector3.new(itemPos.X - root.Position.X, 0, itemPos.Z - root.Position.Z).Magnitude
+                            if flatDist > 80 then
+                                local pad = closestPadTo(itemPos)
+                                if pad and (pad - root.Position).Magnitude > 12 then
+                                    root.AssemblyLinearVelocity = Vector3.zero
+                                    root.AssemblyAngularVelocity = Vector3.zero
+                                    root.CFrame = CFrame.new(pad + Vector3.new(0, 3, 0))
+                                    task.wait(0.05)
+                                    continue
+                                end
+                            end
+                        end
                         local originalMaxStep = Settings.maxStep
                         local isRoadroller = string.lower((item.Name or ""):gsub("%s+", "")) == "roadrolleeeeerr"
 
@@ -1038,7 +1072,7 @@ GachaBtn.Size = UDim2.new(1, 0, 1, 0)
 GachaBtn.Position = UDim2.new(0, 0, 0, 0)
 GachaBtn.BackgroundTransparency = 1
 GachaBtn.AutoButtonColor = false
-GachaBtn.Text = "    Убрать GachaReveal (CLIENT)                                                        👆"
+GachaBtn.Text = "    Убрать GachaReveal (CLIENT)                                                        👆"
 GachaBtn.TextColor3 = Color3.fromRGB(220, 220, 235)
 GachaBtn.Font = Enum.Font.Gotham
 GachaBtn.TextSize = 14
@@ -1230,3 +1264,4 @@ makeDraggable(Main, TitleBar)
 makeDraggable(Mini, Mini)
 switchTab("Main")
 print("Farm Hub: зоны на Main")
+
