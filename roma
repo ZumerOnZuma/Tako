@@ -420,8 +420,8 @@ local function safeTeleport(targetPos, targetItem)
     if totalDist > 600 then forceSafe() return false end
 
     local speed = math.clamp(Settings.maxStep / math.max(Settings.stepDelay, 0.03), 18, 55)
-    if totalDist < 4 then
-        speed = math.min(speed, 40)
+    if currentZone == 5 then
+        speed = math.clamp(speed * 1.5, 25, 90) -- 5 зона быстрее
     end
 
     local segmentLen = math.clamp(Settings.maxStep * 3, 12, 35)
