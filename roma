@@ -65,7 +65,9 @@ local currentZone = 3
 local holePos = Zones[currentZone].hole
 local itemNames = Zones[currentZone].items
 local ZONE5_START = Vector3.new(78, -18.850000381469727, -192)
-local needStartPad = true
+local pendingDeathReturn = false
+local returningFromDeath = false
+local slowReturnToPad
 
 local Settings = {
     maxStep = 4.5,
@@ -221,7 +223,13 @@ local function setupCharacter(char)
     character = char
     root = character:WaitForChild("HumanoidRootPart", 8)
     humanoid = character:WaitForChild("Humanoid", 8)
-    -- больше не останавливаем фарм при смерти — продолжит после респавна
+    if humanoid then
+        humanoid.Died:Connect(function()
+            if currentZone == 5 then
+                pendingDeathReturn = true
+            end
+        end)
+    end
 end
 
 if player.Character then
@@ -231,8 +239,9 @@ end
 player.CharacterAdded:Connect(function(char)
     task.wait(0.6)
     setupCharacter(char)
-    if currentZone == 5 then
-        needStartPad = true
+    if pendingDeathReturn and currentZone == 5 then
+        pendingDeathReturn = false
+        task.spawn(slowReturnToPad)
     end
 end)
 
@@ -291,7 +300,6 @@ local function forceSafe()
         root.AssemblyAngularVelocity = Vector3.zero
     end
     if currentZone == 5 then
-        needStartPad = true
         return
     end
     if root and root.Parent then
@@ -415,6 +423,36 @@ local function getClosestItem()
         end
     end
     return closest
+end
+
+-- только после смерти, около скорости ходьбы, чтобы не ловить unfair movement
+function slowReturnToPad()
+    if returningFromDeath then return end
+    returningFromDeath = true
+    local target = ZONE5_START + Vector3.new(0, 3, 0)
+    local speed = 14
+    while root and root.Parent and (root.Position - target).Magnitude > 4 do
+        local current = root.Position
+        local delta = target - current
+        local dist = delta.Magnitude
+        if dist < 0.1 then break end
+        local step = math.min(2.2, dist)
+        local nextPos = current + delta.Unit * step
+        root.AssemblyLinearVelocity = Vector3.zero
+        root.AssemblyAngularVelocity = Vector3.zero
+        local tw = TweenService:Create(
+            root,
+            TweenInfo.new(step / speed, Enum.EasingStyle.Linear),
+            {CFrame = CFrame.new(nextPos)}
+        )
+        tw:Play()
+        tw.Completed:Wait()
+    end
+    if root and root.Parent then
+        root.AssemblyLinearVelocity = Vector3.zero
+        root.AssemblyAngularVelocity = Vector3.zero
+    end
+    returningFromDeath = false
 end
 
 -- Мгновенный ТП к предмету убран: он кидал в дырку и под карту.
@@ -563,22 +601,14 @@ task.spawn(function()
             if humanoid then
                 humanoid:MoveTo(root.Position)
             end
-            if currentZone == 5 and needStartPad then
-                local startPos = ZONE5_START + Vector3.new(0, 3, 0)
-                if root and (root.Position - startPos).Magnitude > 14 then
-                    safeTeleport(startPos, nil)
-                    task.wait(0.15)
-                end
-                needStartPad = false
+            if returningFromDeath or pendingDeathReturn then
+                task.wait(0.2)
+                continue
             end
             if #itemNames == 0 then
                 task.wait(0.4)
             else
-                if currentZone == 5 and root.Position.Y < -16 then
-                    needStartPad = true
-                    forceSafe()
-                    task.wait(0.4)
-                elseif not isValidPosition(root.Position) then
+                if not isValidPosition(root.Position) then
                     forceSafe()
                     task.wait(0.4)
                 end
@@ -864,9 +894,6 @@ for i = 1, 5 do
         drawZone()
         ZoneList.Visible = false
         deposited = 0
-        if i == 5 then
-            needStartPad = true
-        end
     end)
 end
 
@@ -921,9 +948,6 @@ end
 
 local updateFarmToggle = createToggle(MainPage, "Автофарм", 118, running, function(state)
     running = state
-    if state and currentZone == 5 then
-        needStartPad = true
-    end
     StatusLabel.Text = state and "Status: Running" or "Status: Stopped"
     StatusLabel.TextColor3 = state and Color3.fromRGB(100, 255, 140) or Color3.fromRGB(255, 100, 100)
     saveConfig()
@@ -1192,9 +1216,6 @@ UIS.InputBegan:Connect(function(input, gp)
     if gp then return end
     if input.KeyCode == Enum.KeyCode.F then
         running = not running
-        if running and currentZone == 5 then
-            needStartPad = true
-        end
         updateFarmToggle(running)
         StatusLabel.Text = running and "Status: Running" or "Status: Stopped"
         StatusLabel.TextColor3 = running and Color3.fromRGB(100, 255, 140) or Color3.fromRGB(255, 100, 100)
