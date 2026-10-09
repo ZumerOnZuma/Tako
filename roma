@@ -239,11 +239,38 @@ end)
 local THROW_HEIGHT = 3.2
 
 local function safePos()
+    if currentZone == 5 then
+        return ZONE5_START + Vector3.new(0, 4, 0)
+    end
     if not holePos then
         return (root and root.Position) or Vector3.new(0, 8, 0)
     end
-    -- не над центром дыры: иначе засасывает под карту
-    return holePos + Vector3.new(18, 8, 0)
+    return holePos + Vector3.new(22, 8, 0)
+end
+
+local HOLE_CLEAR = 16
+
+local function holeList()
+    local zone = Zones[currentZone]
+    if zone and zone.holes then
+        return zone.holes
+    end
+    if holePos then
+        return { holePos }
+    end
+    return {}
+end
+
+local function pushOutOfHole(pos)
+    if typeof(pos) ~= "Vector3" then return pos end
+    for _, h in ipairs(holeList()) do
+        local flat = Vector3.new(pos.X - h.X, 0, pos.Z - h.Z)
+        if flat.Magnitude < HOLE_CLEAR then
+            local dir = flat.Magnitude < 0.5 and Vector3.new(1, 0, 0) or flat.Unit
+            pos = Vector3.new(h.X, pos.Y, h.Z) + dir * (HOLE_CLEAR + 2)
+        end
+    end
+    return pos
 end
 
 -- ====================== ПРОВЕРКИ ======================
@@ -401,6 +428,7 @@ local function safeTeleport(targetPos, targetItem)
     root.AssemblyLinearVelocity = Vector3.zero
     root.AssemblyAngularVelocity = Vector3.zero
 
+    targetPos = pushOutOfHole(targetPos)
     local totalDist = (targetPos - current).Magnitude
     if totalDist > 700 then forceSafe() return false end
 
@@ -416,7 +444,7 @@ local function safeTeleport(targetPos, targetItem)
         if not running or not root or not root.Parent then forceSafe() return false end
         if targetItem and not isItemStillValid(targetItem) then forceSafe() return false end
 
-        local nextPos = current:Lerp(targetPos, i / segments)
+        local nextPos = pushOutOfHole(current:Lerp(targetPos, i / segments))
         if not isValidPosition(nextPos) then forceSafe() return false end
 
         local segDist = (nextPos - root.Position).Magnitude
@@ -484,7 +512,8 @@ local function getBestThrowPosition(fromPos)
     else
         direction = direction.Unit
     end
-    return targetHole + direction * Settings.throwRadius + Vector3.new(0, THROW_HEIGHT, 0)
+    local radius = math.max(Settings.throwRadius, 18)
+    return pushOutOfHole(targetHole + direction * radius + Vector3.new(0, THROW_HEIGHT + 2, 0))
 end
 
 local function aimCameraAtHole()
@@ -530,7 +559,11 @@ task.spawn(function()
             if #itemNames == 0 then
                 task.wait(0.4)
             else
-                if not isValidPosition(root.Position) then
+                if currentZone == 5 and root.Position.Y < -16 then
+                    needStartPad = true
+                    forceSafe()
+                    task.wait(0.4)
+                elseif not isValidPosition(root.Position) then
                     forceSafe()
                     task.wait(0.4)
                 end
