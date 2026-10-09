@@ -64,7 +64,9 @@ local Zones = {
 local currentZone = 3
 local holePos = Zones[currentZone].hole
 local itemNames = Zones[currentZone].items
-local ZONE5_START = Vector3.new(78, -18.850000381469727, -192)
+local ZONE5_START = Vector3.new(78.7394562, -15.7000027, -194.000427)
+local ZONE5_SPAWN_CF = CFrame.new(78.7394562, -15.7000027, -194.000427, 0.999876618, -1.5834356e-08, 0.0157080218, 1.459565e-08, 1, 7.8972846e-08, -0.0157080218, -1.2e-08, 0.999876618)
+local zone5Spawn
 local ZONE5_PADS = {
     Vector3.new(77.7435073852539, -15.126978874206543, -319.9517822265625),
     Vector3.new(-12.052742004394531, -15.057611465454102, -495.75677490234375),
@@ -197,6 +199,34 @@ local function findZone1Hole()
     return nil
 end
 
+local function setZone5Spawn(on)
+    if not on then
+        if zone5Spawn then
+            if player.RespawnLocation == zone5Spawn then
+                player.RespawnLocation = nil
+            end
+            zone5Spawn:Destroy()
+            zone5Spawn = nil
+        end
+        return
+    end
+    if not zone5Spawn or not zone5Spawn.Parent then
+        zone5Spawn = Instance.new("SpawnLocation")
+        zone5Spawn.Name = "FarmHubSpawn"
+        zone5Spawn.Anchored = true
+        zone5Spawn.CanCollide = false
+        zone5Spawn.Transparency = 1
+        zone5Spawn.Size = Vector3.new(6, 1, 6)
+        zone5Spawn.Neutral = true
+        zone5Spawn.Duration = 0
+        zone5Spawn.Enabled = true
+        zone5Spawn.Parent = workspace
+    end
+    zone5Spawn.CFrame = ZONE5_SPAWN_CF
+    player.RespawnLocation = zone5Spawn
+    print("Spawn point created at", tostring(ZONE5_SPAWN_CF))
+end
+
 local function applyZone(id)
     currentZone = id
     itemNames = Zones[id].items
@@ -206,9 +236,8 @@ local function applyZone(id)
         holePos = Zones[id].hole
     end
     saveConfig()
+    setZone5Spawn(id == 5)
 end
-
--- Ближайшая дыра (для 5 зоны)
 local function getClosestHole(fromPos)
     local zone = Zones[currentZone]
     if not zone or not zone.holes then
@@ -244,6 +273,7 @@ end
 if player.Character then
     setupCharacter(player.Character)
 end
+setZone5Spawn(currentZone == 5)
 
 player.CharacterAdded:Connect(function(char)
     task.wait(0.6)
@@ -537,6 +567,38 @@ function slowReturnToPad()
     returningFromDeath = false
 end
 
+local function readGiveMe()
+    local pg = player:FindFirstChild("PlayerGui")
+    if not pg then return nil, nil end
+    for _, obj in ipairs(pg:GetDescendants()) do
+        if obj:IsA("TextLabel") or obj:IsA("TextButton") then
+            local cur, max = string.match(obj.Text or "", "(%d+)%s*/%s*(%d+)")
+            if cur and max and tonumber(max) >= 3 and tonumber(max) <= 20 then
+                return tonumber(cur), tonumber(max), obj:GetFullName()
+            end
+        end
+    end
+    return nil, nil
+end
+
+local function saleWait()
+    -- игра сдаёт каждые 3 предмета. Пока шкала прыгает, сервер не принимает подбор.
+    local before = readGiveMe()
+    local started = os.clock()
+    while os.clock() - started < 1.6 do
+        local now = readGiveMe()
+        if before and now and now < before then
+            break
+        end
+        if not before and deposited > 0 and deposited % 3 == 0 then
+            task.wait(1.1)
+            return
+        end
+        task.wait(0.1)
+    end
+    task.wait(0.35)
+end
+
 local function pickupItem(item)
     if not isItemStillValid(item) then return false end
     local prompt = item:FindFirstChildWhichIsA("ProximityPrompt", true)
@@ -676,12 +738,32 @@ task.spawn(function()
     end
 end)
 
+local function readGiveCount()
+    local pg = player:FindFirstChild("PlayerGui")
+    local hud = pg and pg:FindFirstChild("HUD")
+    local holder = hud and hud:FindFirstChild("GiveMeButtonHolder", true)
+    local count = holder and holder:FindFirstChild("Count", true)
+    local label = count and count:FindFirstChild("Label")
+    if not label or not label:IsA("TextLabel") then
+        return nil, nil
+    end
+    local cur, max = string.match(label.Text or "", "(%d+)%s*/%s*(%d+)")
+    if not cur then
+        return nil, nil
+    end
+    return tonumber(cur), tonumber(max)
+end
+
 task.spawn(function()
-    while task.wait(3) do
+    while task.wait(0.4) do
         if autoReset then
-            pcall(function()
-                game:GetService("ReplicatedStorage").Remotes.HoleGiveMe:InvokeServer()
-            end)
+            local cur, max = readGiveCount()
+            if cur and max and max > 0 and cur >= max then
+                pcall(function()
+                    game:GetService("ReplicatedStorage").Remotes.HoleGiveMe:InvokeServer()
+                end)
+                task.wait(1.2)
+            end
         end
     end
 end)
@@ -1072,7 +1154,7 @@ GachaBtn.Size = UDim2.new(1, 0, 1, 0)
 GachaBtn.Position = UDim2.new(0, 0, 0, 0)
 GachaBtn.BackgroundTransparency = 1
 GachaBtn.AutoButtonColor = false
-GachaBtn.Text = "    Убрать GachaReveal (CLIENT)                                                        👆"
+GachaBtn.Text = "    Убрать GachaReveal (CLIENT)                                                        👆"
 GachaBtn.TextColor3 = Color3.fromRGB(220, 220, 235)
 GachaBtn.Font = Enum.Font.Gotham
 GachaBtn.TextSize = 14
@@ -1264,4 +1346,3 @@ makeDraggable(Main, TitleBar)
 makeDraggable(Mini, Mini)
 switchTab("Main")
 print("Farm Hub: зоны на Main")
-
