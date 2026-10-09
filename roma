@@ -241,6 +241,7 @@ player.CharacterAdded:Connect(function(char)
     setupCharacter(char)
     if pendingDeathReturn and currentZone == 5 then
         pendingDeathReturn = false
+        returningFromDeath = true
         task.spawn(slowReturnToPad)
     end
 end)
@@ -425,36 +426,8 @@ local function getClosestItem()
     return closest
 end
 
--- только после смерти, та же скорость что и полёт к предмету
-function slowReturnToPad()
-    if returningFromDeath then return end
-    returningFromDeath = true
-    local target = ZONE5_START + Vector3.new(0, 3, 0)
-    local speed = math.clamp(Settings.maxStep / math.max(Settings.stepDelay, 0.02), 25, 140)
-    local stepSize = math.clamp(Settings.maxStep * 3, 12, 45)
-    while root and root.Parent and (root.Position - target).Magnitude > 4 do
-        local current = root.Position
-        local delta = target - current
-        local dist = delta.Magnitude
-        if dist < 0.1 then break end
-        local step = math.min(stepSize, dist)
-        local nextPos = current + delta.Unit * step
-        root.AssemblyLinearVelocity = Vector3.zero
-        root.AssemblyAngularVelocity = Vector3.zero
-        local tw = TweenService:Create(
-            root,
-            TweenInfo.new(math.clamp(step / speed, 0.04, 1.2), Enum.EasingStyle.Linear),
-            {CFrame = CFrame.new(nextPos)}
-        )
-        tw:Play()
-        tw.Completed:Wait()
-    end
-    if root and root.Parent then
-        root.AssemblyLinearVelocity = Vector3.zero
-        root.AssemblyAngularVelocity = Vector3.zero
-    end
-    returningFromDeath = false
-end
+-- тело ниже, после safeTeleport: иначе после смерти летит отдельно и медленно
+function slowReturnToPad() end
 
 -- Мгновенный ТП к предмету убран: он кидал в дырку и под карту.
 local function jumpNearItem(itemPos)
@@ -537,6 +510,12 @@ local function safeTeleport(targetPos, targetItem, keepNearHole)
     return true
 end
 
+function slowReturnToPad()
+    returningFromDeath = true
+    safeTeleport(ZONE5_START + Vector3.new(0, 3, 0), nil, true)
+    returningFromDeath = false
+end
+
 local function pickupItem(item)
     if not isItemStillValid(item) then return false end
     local prompt = item:FindFirstChildWhichIsA("ProximityPrompt", true)
@@ -599,12 +578,12 @@ task.spawn(function()
                 end
                 holePos = mine
             end
-            if humanoid then
-                humanoid:MoveTo(root.Position)
-            end
             if returningFromDeath or pendingDeathReturn then
                 task.wait(0.2)
                 continue
+            end
+            if humanoid then
+                humanoid:MoveTo(root.Position)
             end
             if #itemNames == 0 then
                 task.wait(0.4)
