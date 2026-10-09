@@ -425,24 +425,25 @@ local function getClosestItem()
     return closest
 end
 
--- только после смерти, около скорости ходьбы, чтобы не ловить unfair movement
+-- только после смерти, та же скорость что и полёт к предмету
 function slowReturnToPad()
     if returningFromDeath then return end
     returningFromDeath = true
     local target = ZONE5_START + Vector3.new(0, 3, 0)
-    local speed = 14
+    local speed = math.clamp(Settings.maxStep / math.max(Settings.stepDelay, 0.02), 25, 140)
+    local stepSize = math.clamp(Settings.maxStep * 3, 12, 45)
     while root and root.Parent and (root.Position - target).Magnitude > 4 do
         local current = root.Position
         local delta = target - current
         local dist = delta.Magnitude
         if dist < 0.1 then break end
-        local step = math.min(2.2, dist)
+        local step = math.min(stepSize, dist)
         local nextPos = current + delta.Unit * step
         root.AssemblyLinearVelocity = Vector3.zero
         root.AssemblyAngularVelocity = Vector3.zero
         local tw = TweenService:Create(
             root,
-            TweenInfo.new(step / speed, Enum.EasingStyle.Linear),
+            TweenInfo.new(math.clamp(step / speed, 0.04, 1.2), Enum.EasingStyle.Linear),
             {CFrame = CFrame.new(nextPos)}
         )
         tw:Play()
