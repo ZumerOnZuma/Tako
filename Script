@@ -1,3 +1,4 @@
+
 -- ====================== SERVICES ======================
 local Players = game:GetService("Players")
 local UIS = game:GetService("UserInputService")
@@ -515,6 +516,7 @@ local function safeTeleport(targetPos, targetItem, keepNearHole)
     local totalDist = (targetPos - current).Magnitude
     if totalDist > 700 then forceSafe() return false end
 
+    -- Скорость как на рабочей 5 зоне (потолок 140)
     local speed = math.clamp(Settings.maxStep / math.max(Settings.stepDelay, 0.02), 25, 140)
     if totalDist < 4 then
         speed = math.min(speed, 50)
@@ -692,6 +694,7 @@ task.spawn(function()
                 if item and not isHeldBySomeoneElse(item) then
                     local itemPos = getItemPos(item)
                     if itemPos and isValidPosition(itemPos) then
+                        -- 5 зона: быстрый подлёт через пады, если предмет далеко
                         if currentZone == 5 then
                             local flatDist = Vector3.new(itemPos.X - root.Position.X, 0, itemPos.Z - root.Position.Z).Magnitude
                             if flatDist > 80 then
@@ -702,6 +705,24 @@ task.spawn(function()
                                     root.CFrame = CFrame.new(pad + Vector3.new(0, 3, 0))
                                     task.wait(0.05)
                                     continue
+                                end
+                            end
+                        end
+                        -- 6 зона: один мягкий рывок ближе, если предмет далеко (падов нет)
+                        if currentZone == 6 then
+                            local flatDist = Vector3.new(itemPos.X - root.Position.X, 0, itemPos.Z - root.Position.Z).Magnitude
+                            if flatDist > 80 then
+                                local dir = (itemPos - root.Position) * Vector3.new(1, 0, 1)
+                                if dir.Magnitude > 1 then
+                                    dir = dir.Unit
+                                    local near = itemPos - dir * 35 + Vector3.new(0, 4, 0)
+                                    near = pushOutOfHole(near)
+                                    if isValidPosition(near) then
+                                        root.AssemblyLinearVelocity = Vector3.zero
+                                        root.AssemblyAngularVelocity = Vector3.zero
+                                        root.CFrame = CFrame.new(near)
+                                        task.wait(0.05)
+                                    end
                                 end
                             end
                         end
